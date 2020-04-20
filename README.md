@@ -30,9 +30,10 @@ anywherectl -listener-name=pefish -listener-token=token_test -server-token=test_
 
 ## Todo and Done
 
-- [x] REGISTER command
-- [x] RESPONSE_REGISTER command
-- [ ] Heartbeat between server and listeners (server与listener之间的心跳机制)
+- [x] REGISTER command (listener -> server)
+- [x] REGISTER_OK command (server -> listener)
+- [x] REGISTER_FAIL command (server -> listener)
+- [x] Heartbeat between server and listeners (server与listener之间的心跳机制)
 - [ ] Listener reconnection (listener重连server机制)
 - [ ] SHELL command (server -> listener)
 - [ ] RESPONSE_SHELL (listener -> server)

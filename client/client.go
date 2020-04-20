@@ -7,7 +7,7 @@ import (
 )
 
 type Client struct {
-
+	finishChan chan <- bool
 }
 
 func NewClient() *Client {
@@ -16,18 +16,19 @@ func NewClient() *Client {
 	}
 }
 
-func (s *Client) DecorateFlagSet(flagSet *flag.FlagSet) {
+func (c *Client) DecorateFlagSet(flagSet *flag.FlagSet) {
 
 }
 
-func (s *Client) ParseFlagSet(flagSet *flag.FlagSet) {
+func (c *Client) ParseFlagSet(flagSet *flag.FlagSet) {
 	err := flagSet.Parse(os.Args[1:])
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func (c *Client) Start(flagSet *flag.FlagSet) error {
+func (c *Client) Start(finishChan chan <- bool, flagSet *flag.FlagSet) error {
+	c.finishChan = finishChan
 
 	//flagSet.String("tcp-address", opts.TCPAddress, "<addr>:<port> to listen on for TCP clients")
 	//flagSet.String("http-address", opts.HTTPAddress, "<addr>:<port> to listen on for HTTP clients")
@@ -44,6 +45,10 @@ func (c *Client) Start(flagSet *flag.FlagSet) error {
 	return nil
 }
 
-func (s *Client) Stop() {
+func (c *Client) Exit() {
+	close(c.finishChan)
+}
+
+func (c *Client) Clear() {
 
 }

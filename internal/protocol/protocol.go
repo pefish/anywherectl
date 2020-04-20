@@ -1,33 +1,121 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"net"
 	"strings"
 )
 
-func ReadCommandAndParams(conn net.Conn) (string, []string, error) {
-	commandBuf := make([]byte, 32)
-	_, err := io.ReadFull(conn, commandBuf)
-	if err != nil {
-		// 读完了会抛错EOF
-		return "", nil, fmt.Errorf("failed to read command - %s", err)
-	}
-	commandStr := strings.TrimSpace(string(commandBuf))
-
-	var paramMsgSize int32
-	err = binary.Read(conn, binary.BigEndian, &paramMsgSize)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to read param message length - %s", err)
-	}
-	paramsBuf := make([]byte, paramMsgSize) // 读出所有参数
-	_, err = io.ReadFull(conn, paramsBuf)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to read param message - %s", err)
-	}
-	paramMessage := string(paramsBuf)
-
-	return commandStr, strings.Split(paramMessage, " "), nil
+type ProtocolPackage struct {
+	Version       string
+	ServerToken   string
+	ListenerToken string
+	Command       string
+	Params        []string
 }
+
+func WritePackage(conn net.Conn, p *ProtocolPackage) error {
+	var packageBuf bytes.Buffer
+
+	if p.Version == "" {
+		return errors.New("(WritePackage) version must be set")
+	}
+	if len(p.Version) > 4 {
+		return errors.New("(WritePackage) version too long")
+	}
+	versionBuf := bytes.Repeat([]byte(" "), 4)
+	copy(versionBuf, p.Version)
+	packageBuf.Write(versionBuf)
+
+	if len(p.ServerToken) > 32 {
+		return errors.New("(WritePackage) server token too long")
+	}
+	serverTokenBuf := bytes.Repeat([]byte(" "), 32)
+	if p.ServerToken != "" {
+		copy(serverTokenBuf, p.ServerToken)
+	}
+	packageBuf.Write(serverTokenBuf)
+
+	if len(p.ListenerToken) > 32 {
+		return errors.New("(WritePackage) listener token too long")
+	}
+	listenerTokenBuf := bytes.Repeat([]byte(" "), 32)
+	if p.ListenerToken != "" {
+		copy(listenerTokenBuf, p.ListenerToken)
+	}
+	packageBuf.Write(listenerTokenBuf)
+
+	if p.Version == "" {
+		return errors.New("(WritePackage) command must be set")
+	}
+	if len(p.Command) > 32 {
+		return errors.New("(WritePackage) command too long")
+	}
+	commandBuf := bytes.Repeat([]byte(" "), 32)
+	copy(commandBuf, p.Command)
+	packageBuf.Write(commandBuf)
+
+	var paramsSize uint32
+	var paramsStr string
+	if p.Params == nil {
+		paramsSize = 0
+	} else {
+		paramsStr = strings.Join(p.Params, "||")
+		paramsSize = uint32(len(paramsStr))
+	}
+	paramsSizeBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(paramsSizeBuf, paramsSize)
+	packageBuf.Write(paramsSizeBuf)
+
+
+	if p.Params != nil {
+		packageBuf.Write([]byte(paramsStr))
+	}
+
+	//fmt.Println(packageBuf.Bytes())
+	_, err := conn.Write(packageBuf.Bytes())
+	if err != nil {
+		return fmt.Errorf("(WritePackage) write to conn err - %s", err)
+	}
+
+	return nil
+}
+
+func ReadPackage(conn net.Conn) (*ProtocolPackage, error) {
+	headerBuf := make([]byte, 104)
+	_, err := io.ReadFull(conn, headerBuf)
+	if err != nil {
+		return nil, fmt.Errorf("(ReadPackage) failed to read command - %s", err)
+	}
+	version := strings.TrimSpace(string(headerBuf[:4]))
+	serverToken := strings.TrimSpace(string(headerBuf[4:36]))
+	listenerToken := strings.TrimSpace(string(headerBuf[36:68]))
+	command := strings.TrimSpace(string(headerBuf[68:100]))
+	var paramsStrSize uint32
+	err = binary.Read(bytes.NewReader(headerBuf[100:]), binary.BigEndian, &paramsStrSize)
+	if err != nil {
+		return nil, fmt.Errorf("(ReadPackage) failed to read param message length - %s", err)
+	}
+
+	params := make([]string, 0)
+	if paramsStrSize != 0 {
+		paramsBuf := make([]byte, paramsStrSize) // 读出所有参数
+		_, err = io.ReadFull(conn, paramsBuf)
+		if err != nil {
+			return nil, fmt.Errorf("(ReadPackage) failed to read param message - %s", err)
+		}
+		params = strings.Split(string(paramsBuf), "||")
+	}
+	return &ProtocolPackage{
+		Version:       version,
+		ServerToken:   serverToken,
+		ListenerToken: listenerToken,
+		Command:       command,
+		Params:        params,
+	}, nil
+}
+

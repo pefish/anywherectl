@@ -40,30 +40,26 @@ func main() {
 		os.Exit(0)
 	}
 
-	exitChan := make(chan bool, 1)
-	go func() {
-		err := subServer.Start(flagSet)
-		if err != nil {
-			go_logger.Logger.Error(err)
-		}
-		close(exitChan)
-	}()
+	finishChan := make(chan bool, 1)
+	subServer.Start(finishChan, flagSet)
 
 	signalChan := make(chan os.Signal, 1)
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	select {
 	case <-signalChan:
-	case <-exitChan:
+	case <-finishChan:
 	}
 
 	go_logger.Logger.Info("Stopping...")
-	subServer.Stop()
+	subServer.Clear()
 	go_logger.Logger.Info("Stopped")
+
 }
 
 type SubServerInterface interface {
 	DecorateFlagSet(flagSet *flag.FlagSet)
 	ParseFlagSet(flagset *flag.FlagSet)
-	Start(flagSet *flag.FlagSet) error
-	Stop()
+	Start(finishChan chan <- bool, flagSet *flag.FlagSet) error
+	Exit()
+	Clear()
 }
