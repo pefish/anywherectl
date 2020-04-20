@@ -141,10 +141,6 @@ func (s *Server) heartbeatLoop(ctx context.Context) {
 			}
 			timer.Reset(s.heartbeatInterval)
 		case <-ctx.Done():
-			// 断开所有listener连接
-			for _, listenerConn := range s.listeners {
-				s.destroyListenerConn(listenerConn.conn)
-			}
 			goto exit
 		}
 	}
@@ -159,6 +155,10 @@ func (s *Server) Exit() {
 
 func (s *Server) Clear() {
 	s.tcpListener.Close()
+	// 断开所有listener连接
+	for _, listenerConn := range s.listeners {
+		s.destroyListenerConn(listenerConn.conn)
+	}
 	s.cancelFunc()
 	s.wg.Wait()
 }
@@ -204,7 +204,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			}
 
 			// 执行命令
-			err = s.execCommand(conn, packageData.Command, packageData.Params)  // execCommand出错就关闭连接
+			err = s.execCommand(conn, packageData)  // execCommand出错就关闭连接
 			if err != nil {
 				go_logger.Logger.ErrorF("LISTENER(%s): failed to exec %s command - %s", s.connIdListenerNameMap[conn.RemoteAddr().String()], packageData.Command, err)
 				goto exitConn
@@ -220,9 +220,9 @@ exitConn:
 	s.wg.Done()
 }
 
-func (s *Server) execCommand(conn net.Conn, name string, params []string) error {
-	if name == "REGISTER" {
-		listenerConn, err := s.cmdRegister(conn, params)
+func (s *Server) execCommand(conn net.Conn, packageData *protocol.ProtocolPackage) error {
+	if packageData.Command == "REGISTER" {
+		listenerConn, err := s.cmdRegister(conn, packageData)
 		if err != nil {
 			tempListenerConn := &ListenerConn{
 				conn:            conn,
@@ -238,7 +238,7 @@ func (s *Server) execCommand(conn net.Conn, name string, params []string) error 
 		if err != nil {
 			go_logger.Logger.WarnF("failed to exec REGISTER_OK command - %s", err)
 		}
-	} else if name == "PONG" {
+	} else if packageData.Command == "PONG" {
 		go_logger.Logger.DebugF("LISTENER(%s): received PONG.", s.connIdListenerNameMap[conn.RemoteAddr().String()])
 	} else {
 		return errors.New("command error")
@@ -256,24 +256,22 @@ func (s *Server) destroyListenerConn(conn net.Conn) {
 	delete(s.connIdListenerNameMap, connId)
 }
 
-func (s *Server) cmdRegister(conn net.Conn, params []string) (*ListenerConn, error) {
-	if len(params) != 2 {
-		return nil, errors.New("cmdRegister param length error")
+func (s *Server) cmdRegister(conn net.Conn, packageData *protocol.ProtocolPackage) (*ListenerConn, error) {
+	if len(packageData.Params) != 1 {
+		return nil, fmt.Errorf("cmdRegister param length error. length: %d", len(packageData.Params))
 	}
-	name := params[0]
-	//clientTokensStr := params[1]
-	fmt.Println("name", name)
+	//clientTokensStr := packageData.Params[0]
 	// 保存连接
-	if listenerConn, ok := s.listeners[name]; ok { // 已经存在的话，就断开老的连接
+	if listenerConn, ok := s.listeners[packageData.ListenerName]; ok { // 已经存在的话，就断开老的连接
 		s.destroyListenerConn(listenerConn.conn)
 	}
 	listenerConn := &ListenerConn{
-		listener:        listener.NewListener(name),
+		listener:        listener.NewListener(packageData.ListenerName),
 		conn:            conn,
 		sendCommandLock: sync.Mutex{},
 	}
-	s.listeners[name] = listenerConn
-	s.connIdListenerNameMap[conn.RemoteAddr().String()] = name
+	s.listeners[packageData.ListenerName] = listenerConn
+	s.connIdListenerNameMap[conn.RemoteAddr().String()] = packageData.ListenerName
 	return listenerConn, nil
 }
 

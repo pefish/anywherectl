@@ -86,8 +86,7 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) error {
 
 	// 开始注册
 	err = l.sendCommandToServer("REGISTER", []string{
-		l.name,
-		"",
+		"cvc",
 	})
 	if err != nil {
 		return fmt.Errorf("write params to conn err - %s", err)
@@ -155,6 +154,7 @@ func (l *Listener) sendCommandToServer(command string, params []string) error {
 	return protocol.WritePackage(l.serverConn, &protocol.ProtocolPackage{
 		Version:       version.ProtocolVersion,
 		ServerToken:   l.serverToken,
+		ListenerName:  l.name,
 		ListenerToken: "",
 		Command:       command,
 		Params:        params,

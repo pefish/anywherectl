@@ -12,7 +12,7 @@ Anywherectl is a tool to remote control anything. Enjoy it !!!
 anywherectl serve -tcp-address=0.0.0.0:8181 -listener-token=test_token -client-token=test -log-level=debug
 ```
 
-### Start listener
+### Start Listener
 
 ```shell script
 anywherectl listen -name=pefish -server-token=test_token -server-address=0.0.0.0:8181 -config=/path/to/config.yaml

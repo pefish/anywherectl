@@ -13,6 +13,7 @@ import (
 type ProtocolPackage struct {
 	Version       string
 	ServerToken   string
+	ListenerName  string
 	ListenerToken string
 	Command       string
 	Params        []string
@@ -39,6 +40,15 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) error {
 		copy(serverTokenBuf, p.ServerToken)
 	}
 	packageBuf.Write(serverTokenBuf)
+
+	if len(p.ListenerName) > 32 {
+		return errors.New("(WritePackage) listener name too long")
+	}
+	listenerNameBuf := bytes.Repeat([]byte(" "), 32)
+	if p.ListenerName != "" {
+		copy(listenerNameBuf, p.ListenerName)
+	}
+	packageBuf.Write(listenerNameBuf)
 
 	if len(p.ListenerToken) > 32 {
 		return errors.New("(WritePackage) listener token too long")
@@ -71,7 +81,6 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) error {
 	binary.BigEndian.PutUint32(paramsSizeBuf, paramsSize)
 	packageBuf.Write(paramsSizeBuf)
 
-
 	if p.Params != nil {
 		packageBuf.Write([]byte(paramsStr))
 	}
@@ -86,17 +95,18 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) error {
 }
 
 func ReadPackage(conn net.Conn) (*ProtocolPackage, error) {
-	headerBuf := make([]byte, 104)
+	headerBuf := make([]byte, 136)
 	_, err := io.ReadFull(conn, headerBuf)
 	if err != nil {
 		return nil, fmt.Errorf("(ReadPackage) failed to read command - %s", err)
 	}
 	version := strings.TrimSpace(string(headerBuf[:4]))
 	serverToken := strings.TrimSpace(string(headerBuf[4:36]))
-	listenerToken := strings.TrimSpace(string(headerBuf[36:68]))
-	command := strings.TrimSpace(string(headerBuf[68:100]))
+	listenerName := strings.TrimSpace(string(headerBuf[36:68]))
+	listenerToken := strings.TrimSpace(string(headerBuf[68:100]))
+	command := strings.TrimSpace(string(headerBuf[100:132]))
 	var paramsStrSize uint32
-	err = binary.Read(bytes.NewReader(headerBuf[100:]), binary.BigEndian, &paramsStrSize)
+	err = binary.Read(bytes.NewReader(headerBuf[132:]), binary.BigEndian, &paramsStrSize)
 	if err != nil {
 		return nil, fmt.Errorf("(ReadPackage) failed to read param message length - %s", err)
 	}
@@ -113,9 +123,9 @@ func ReadPackage(conn net.Conn) (*ProtocolPackage, error) {
 	return &ProtocolPackage{
 		Version:       version,
 		ServerToken:   serverToken,
+		ListenerName:  listenerName,
 		ListenerToken: listenerToken,
 		Command:       command,
 		Params:        params,
 	}, nil
 }
-
