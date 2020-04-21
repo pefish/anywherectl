@@ -151,7 +151,7 @@ func (l *Listener) sendCommandToServer(command string, params []string) error {
 	l.sendCommandLock.Lock()
 	defer l.sendCommandLock.Unlock()
 
-	return protocol.WritePackage(l.serverConn, &protocol.ProtocolPackage{
+	_, err := protocol.WritePackage(l.serverConn, &protocol.ProtocolPackage{
 		Version:       version.ProtocolVersion,
 		ServerToken:   l.serverToken,
 		ListenerName:  l.name,
@@ -159,6 +159,7 @@ func (l *Listener) sendCommandToServer(command string, params []string) error {
 		Command:       command,
 		Params:        params,
 	})
+	return err
 }
 
 func (s *Listener) Exit() {

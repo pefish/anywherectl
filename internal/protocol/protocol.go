@@ -19,21 +19,21 @@ type ProtocolPackage struct {
 	Params        []string
 }
 
-func WritePackage(conn net.Conn, p *ProtocolPackage) error {
+func WritePackage(conn net.Conn, p *ProtocolPackage) (int, error) {
 	var packageBuf bytes.Buffer
 
 	if p.Version == "" {
-		return errors.New("(WritePackage) version must be set")
+		return 0, errors.New("(WritePackage) version must be set")
 	}
 	if len(p.Version) > 4 {
-		return errors.New("(WritePackage) version too long")
+		return 0, errors.New("(WritePackage) version too long")
 	}
 	versionBuf := bytes.Repeat([]byte(" "), 4)
 	copy(versionBuf, p.Version)
 	packageBuf.Write(versionBuf)
 
 	if len(p.ServerToken) > 32 {
-		return errors.New("(WritePackage) server token too long")
+		return 0, errors.New("(WritePackage) server token too long")
 	}
 	serverTokenBuf := bytes.Repeat([]byte(" "), 32)
 	if p.ServerToken != "" {
@@ -42,7 +42,7 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) error {
 	packageBuf.Write(serverTokenBuf)
 
 	if len(p.ListenerName) > 32 {
-		return errors.New("(WritePackage) listener name too long")
+		return 0, errors.New("(WritePackage) listener name too long")
 	}
 	listenerNameBuf := bytes.Repeat([]byte(" "), 32)
 	if p.ListenerName != "" {
@@ -51,7 +51,7 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) error {
 	packageBuf.Write(listenerNameBuf)
 
 	if len(p.ListenerToken) > 32 {
-		return errors.New("(WritePackage) listener token too long")
+		return 0, errors.New("(WritePackage) listener token too long")
 	}
 	listenerTokenBuf := bytes.Repeat([]byte(" "), 32)
 	if p.ListenerToken != "" {
@@ -60,10 +60,10 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) error {
 	packageBuf.Write(listenerTokenBuf)
 
 	if p.Version == "" {
-		return errors.New("(WritePackage) command must be set")
+		return 0, errors.New("(WritePackage) command must be set")
 	}
 	if len(p.Command) > 32 {
-		return errors.New("(WritePackage) command too long")
+		return 0, errors.New("(WritePackage) command too long")
 	}
 	commandBuf := bytes.Repeat([]byte(" "), 32)
 	copy(commandBuf, p.Command)
@@ -86,12 +86,12 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) error {
 	}
 
 	//fmt.Println(packageBuf.Bytes())
-	_, err := conn.Write(packageBuf.Bytes())
+	i, err := conn.Write(packageBuf.Bytes())
 	if err != nil {
-		return fmt.Errorf("(WritePackage) write to conn err - %s", err)
+		return 0, fmt.Errorf("(WritePackage) write to conn err - %s", err)
 	}
 
-	return nil
+	return i, nil
 }
 
 func ReadPackage(conn net.Conn) (*ProtocolPackage, error) {

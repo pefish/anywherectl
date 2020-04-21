@@ -279,11 +279,12 @@ func (s *Server) sendToListener(listenerConn *ListenerConn, command string, para
 	listenerConn.sendCommandLock.Lock()
 	defer listenerConn.sendCommandLock.Unlock()
 
-	return protocol.WritePackage(listenerConn.conn, &protocol.ProtocolPackage{
+	_, err := protocol.WritePackage(listenerConn.conn, &protocol.ProtocolPackage{
 		Version:       version.ProtocolVersion,
 		ServerToken:   "",
 		ListenerToken: "",
 		Command:       command,
 		Params:        params,
 	})
+	return err
 }
