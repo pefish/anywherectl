@@ -26,8 +26,8 @@ type ListenerConn struct {
 
 type Server struct {
 	wg                    sync.WaitGroup           // 退出时等待所有连接handle完毕
-	listeners             map[string]*ListenerConn // 连接到server的所有listener,key是listener的name
-	connIdListenerNameMap map[string]string        // 连接的标识与listener的name的对应关系
+	listeners             sync.Map  // map[string]*ListenerConn // 连接到server的所有listener,key是listener的name
+	connIdListenerNameMap sync.Map  // map[string]string        // 连接的标识与listener的name的对应关系
 	heartbeatInterval     time.Duration            // listener的心跳间隔
 	listenerToken         string                   // listener连接是需要的token
 	clientToken           string                   // client连接时需要的token
@@ -39,9 +39,9 @@ type Server struct {
 func NewServer() *Server {
 	return &Server{
 		wg:                    sync.WaitGroup{},
-		listeners:             make(map[string]*ListenerConn),
+		listeners:             sync.Map{},
 		heartbeatInterval:     5 * time.Second,
-		connIdListenerNameMap: make(map[string]string),
+		connIdListenerNameMap: sync.Map{},
 	}
 }
 
@@ -58,25 +58,28 @@ func (s *Server) ParseFlagSet(flagSet *flag.FlagSet) {
 	}
 }
 
-func (s *Server) Start(finishChan chan<- bool, flagSet *flag.FlagSet) error {
+func (s *Server) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 	s.finishChan = finishChan
 
 	listenerToken := flagSet.Lookup("listener-token").Value.(flag.Getter).Get().(string)
 	if listenerToken == "" {
-		return errors.New("listener token must be set")
+		go_logger.Logger.Error("listener token must be set")
+		return
 	}
 	s.listenerToken = listenerToken
 
 	clientToken := flagSet.Lookup("client-token").Value.(flag.Getter).Get().(string)
 	if clientToken == "" {
-		return errors.New("client token must be set")
+		go_logger.Logger.Error("client token must be set")
+		return
 	}
 	s.clientToken = clientToken
 
 	tcpAddress := flagSet.Lookup("tcp-address").Value.(flag.Getter).Get().(string)
 	tcpListener, err := net.Listen("tcp", tcpAddress)
 	if err != nil {
-		return errors.New(fmt.Sprintf("listen (%s) failed - %s", tcpAddress, err))
+		go_logger.Logger.ErrorF("listen (%s) failed - %s", tcpAddress, err)
+		return
 	}
 	s.tcpListener = tcpListener
 	go_logger.Logger.InfoF("TCP: listening on %s", tcpListener.Addr())
@@ -89,8 +92,6 @@ func (s *Server) Start(finishChan chan<- bool, flagSet *flag.FlagSet) error {
 
 	s.wg.Add(1)
 	go s.acceptConnLoop(ctx)
-
-	return nil
 }
 
 func (s *Server) acceptConnLoop(ctx context.Context) {
@@ -124,7 +125,8 @@ func (s *Server) heartbeatLoop(ctx context.Context) {
 	for {
 		select {
 		case <-timer.C:
-			for _, listenerConn := range s.listeners {
+			s.listeners.Range(func(key, value interface{}) bool {
+				listenerConn := value.(*ListenerConn)
 				go_logger.Logger.DebugF("Heartbeat: %s", listenerConn.listener.Name)
 				err := s.sendToListener(listenerConn, "PING", nil)
 				if err != nil {
@@ -133,12 +135,13 @@ func (s *Server) heartbeatLoop(ctx context.Context) {
 					if listenerConn.pingErrCount > 10 {
 						go_logger.Logger.WarnF("LISTENER(%s): ping error too many, close this connection.", listenerConn.listener.Name)
 						s.destroyListenerConn(listenerConn.conn)
-						break
+						return false
 					}
 				} else {
 					listenerConn.pingErrCount = 0
 				}
-			}
+				return true
+			})
 			timer.Reset(s.heartbeatInterval)
 		case <-ctx.Done():
 			goto exit
@@ -156,9 +159,10 @@ func (s *Server) Exit() {
 func (s *Server) Clear() {
 	s.tcpListener.Close()
 	// 断开所有listener连接
-	for _, listenerConn := range s.listeners {
-		s.destroyListenerConn(listenerConn.conn)
-	}
+	s.listeners.Range(func(key, value interface{}) bool {
+		s.destroyListenerConn(value.(*ListenerConn).conn)
+		return true
+	})
 	s.cancelFunc()
 	s.wg.Wait()
 }
@@ -175,6 +179,11 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			goto exitConn
 		default:
 			packageData, err := protocol.ReadPackage(conn)
+			listenerNameInterface, ok := s.connIdListenerNameMap.Load(conn.RemoteAddr().String())
+			listenerName := "new conn"
+			if ok {
+				listenerName = listenerNameInterface.(string)
+			}
 			if err != nil {
 				if strings.HasSuffix(err.Error(), "use of closed network connection") {
 					goto exitConn
@@ -182,10 +191,10 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				if strings.HasSuffix(err.Error(), "EOF") {
 					goto exitConn
 				}
-				go_logger.Logger.ErrorF("CONN(%s): read command and params error - '%s'", s.connIdListenerNameMap[conn.RemoteAddr().String()], err)
+				go_logger.Logger.ErrorF("CONN(%s): read command and params error - '%s'", listenerName, err)
 				goto exitConn
 			}
-			go_logger.Logger.InfoF("CONN(%s): received package '%#v'", s.connIdListenerNameMap[conn.RemoteAddr().String()], packageData)
+			go_logger.Logger.InfoF("CONN(%s): received package '%#v'", listenerName, packageData)
 
 			if packageData.Version != version.ProtocolVersion {
 				go_logger.Logger.ErrorF("CONN(%s): bad protocol version", conn.RemoteAddr())
@@ -195,6 +204,13 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			// 校验token，区分出是listener还是client
 			if packageData.ServerToken != s.listenerToken && packageData.ServerToken != s.clientToken {
 				go_logger.Logger.ErrorF("CONN(%s): bad token", conn.RemoteAddr())
+				sendErr := s.sendToListener(&ListenerConn{
+					conn:            conn,
+					sendCommandLock: sync.Mutex{},
+				}, "ERROR", []string{"bad token"})
+				if sendErr != nil {
+					go_logger.Logger.WarnF("failed to exec REGISTER_FAIL command - %s", err)
+				}
 				goto exitConn
 			}
 			if packageData.ServerToken == s.clientToken { // client连接
@@ -206,7 +222,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			// 执行命令
 			err = s.execCommand(conn, packageData)  // execCommand出错就关闭连接
 			if err != nil {
-				go_logger.Logger.ErrorF("LISTENER(%s): failed to exec %s command - %s", s.connIdListenerNameMap[conn.RemoteAddr().String()], packageData.Command, err)
+				go_logger.Logger.ErrorF("LISTENER(%s): failed to exec %s command - %s", listenerName, packageData.Command, err)
 				goto exitConn
 			}
 		}
@@ -239,7 +255,9 @@ func (s *Server) execCommand(conn net.Conn, packageData *protocol.ProtocolPackag
 			go_logger.Logger.WarnF("failed to exec REGISTER_OK command - %s", err)
 		}
 	} else if packageData.Command == "PONG" {
-		go_logger.Logger.DebugF("LISTENER(%s): received PONG.", s.connIdListenerNameMap[conn.RemoteAddr().String()])
+		listenerNameInterface, _ := s.connIdListenerNameMap.Load(conn.RemoteAddr().String())
+		listenerName := listenerNameInterface.(string)
+		go_logger.Logger.DebugF("LISTENER(%s): received PONG.", listenerName)
 	} else {
 		return errors.New("command error")
 	}
@@ -252,8 +270,10 @@ func (s *Server) destroyListenerConn(conn net.Conn) {
 		go_logger.Logger.WarnF("failed to close old listener conn - %s", err)
 	}
 	connId := conn.RemoteAddr().String()
-	delete(s.listeners, s.connIdListenerNameMap[connId])
-	delete(s.connIdListenerNameMap, connId)
+	listenerNameInterface, _ := s.connIdListenerNameMap.Load(connId)
+	listenerName := listenerNameInterface.(string)
+	s.listeners.Delete(listenerName)
+	s.connIdListenerNameMap.Delete(connId)
 }
 
 func (s *Server) cmdRegister(conn net.Conn, packageData *protocol.ProtocolPackage) (*ListenerConn, error) {
@@ -262,16 +282,16 @@ func (s *Server) cmdRegister(conn net.Conn, packageData *protocol.ProtocolPackag
 	}
 	//clientTokensStr := packageData.Params[0]
 	// 保存连接
-	if listenerConn, ok := s.listeners[packageData.ListenerName]; ok { // 已经存在的话，就断开老的连接
-		s.destroyListenerConn(listenerConn.conn)
+	if listenerConn, ok := s.listeners.Load(packageData.ListenerName); ok { // 已经存在的话，就断开老的连接
+		s.destroyListenerConn(listenerConn.(ListenerConn).conn)
 	}
 	listenerConn := &ListenerConn{
 		listener:        listener.NewListener(packageData.ListenerName),
 		conn:            conn,
 		sendCommandLock: sync.Mutex{},
 	}
-	s.listeners[packageData.ListenerName] = listenerConn
-	s.connIdListenerNameMap[conn.RemoteAddr().String()] = packageData.ListenerName
+	s.listeners.Store(packageData.ListenerName, listenerConn)
+	s.connIdListenerNameMap.Store(conn.RemoteAddr().String(), packageData.ListenerName)
 	return listenerConn, nil
 }
 

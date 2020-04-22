@@ -34,7 +34,7 @@ anywherectl -listener-name=pefish -listener-token=token_test -server-token=test_
 - [x] REGISTER_OK command (server -> listener)
 - [x] REGISTER_FAIL command (server -> listener)
 - [x] Heartbeat between server and listeners (server与listener之间的心跳机制)
-- [ ] Listener reconnection (listener重连server机制)
+- [x] Listener reconnection (listener重连server机制)
 - [ ] SHELL command (server -> listener)
 - [ ] RESPONSE_SHELL (listener -> server)
 - [ ] Chunk transmission (数据量大是需要分chunk传输，才能继续保证tcp连接复用)

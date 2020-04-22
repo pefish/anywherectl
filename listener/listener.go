@@ -26,6 +26,7 @@ type Listener struct {
 	cancelFunc      context.CancelFunc
 	finishChan      chan<- bool
 	name            string
+	isReconnectChan chan <- bool
 }
 
 func NewListener(name string) *Listener {
@@ -50,15 +51,19 @@ func (s *Listener) ParseFlagSet(flagSet *flag.FlagSet) {
 	}
 }
 
-func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) error {
+func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 	l.finishChan = finishChan
 
 	serverToken := flagSet.Lookup("server-token").Value.(flag.Getter).Get().(string)
 	if serverToken == "" {
-		return errors.New("server token must be set")
+		go_logger.Logger.Error("server token must be set")
+		l.Exit()
+		return
 	}
 	if len(serverToken) > 32 {
-		return errors.New("server token too long")
+		go_logger.Logger.Error("server token too long")
+		l.Exit()
+		return
 	}
 	l.serverToken = serverToken
 
@@ -67,32 +72,38 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) error {
 
 	l.name = flagSet.Lookup("name").Value.(flag.Getter).Get().(string)
 	// 连接服务器
-	conn, err := net.Dial("tcp", l.serverAddress)
-	if err != nil {
-		return fmt.Errorf("connect server err - %s", err)
-	}
-	go_logger.Logger.InfoF("server '%s' connected!! start register...", conn.RemoteAddr())
-	l.serverConn = conn
+	rm := NewReconnectManager()
+	connChan, isReconnectChan := rm.Reconnect(l.serverAddress)
+	l.isReconnectChan = isReconnectChan
 
-	// 开始接收消息
-	err = conn.SetReadDeadline(time.Now().Add(10 * time.Second)) // 设置tcp连接的读超时
-	if err != nil {
-		go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
-	}
+	go func() {
+		for {
+			conn := <- connChan
+			go_logger.Logger.InfoF("server '%s' connected!! start register...", conn.RemoteAddr())
+			l.serverConn = conn
 
-	ctx, cancel := context.WithCancel(context.Background())
-	l.cancelFunc = cancel
-	go l.receiveMessageLoop(ctx, conn)
+			// 开始接收消息
+			err := conn.SetReadDeadline(time.Now().Add(10 * time.Second)) // 设置tcp连接的读超时
+			if err != nil {
+				go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
+			}
 
-	// 开始注册
-	err = l.sendCommandToServer("REGISTER", []string{
-		"cvc",
-	})
-	if err != nil {
-		return fmt.Errorf("write params to conn err - %s", err)
-	}
+			ctx, cancel := context.WithCancel(context.Background())
+			l.cancelFunc = cancel
+			go l.receiveMessageLoop(ctx, conn)
 
-	return nil
+			// 开始注册
+			err = l.sendCommandToServer("REGISTER", []string{
+				"cvc",
+			})
+			if err != nil {
+				go_logger.Logger.Error("write params to conn err - %s", err)
+				l.Exit()
+				break
+			}
+		}
+	}()
+
 }
 
 func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
@@ -108,16 +119,15 @@ func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 		default:
 			packageData, err := protocol.ReadPackage(conn)
 			if err != nil {
-				if strings.Contains(err.Error(), "use of closed network connection") {
-					goto exit
+				go_logger.Logger.DebugF("read command and params error - '%s'", err)
+				if strings.Contains(err.Error(), "EOF") {
+					go_logger.Logger.Error("connection disconnected!! start reconnecting...")
+					l.isReconnectChan <- true
+					goto exitMessageLoop
 				}
-				if strings.HasSuffix(err.Error(), "EOF") {
-					goto exit
-				}
-				go_logger.Logger.ErrorF("read command and params error - '%s'", err)
 				goto exit
 			}
-			go_logger.Logger.InfoF("received package '%#v'", packageData)
+			go_logger.Logger.DebugF("received package '%#v'", packageData)
 			err = l.execCommand(conn, packageData.Command, packageData.Params)
 			if err != nil {
 				go_logger.Logger.ErrorF("failed to execCommand command - %s", err)
@@ -129,6 +139,8 @@ func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 exit:
 	conn.Close()
 	l.Exit()
+exitMessageLoop:
+	conn.Close()
 }
 
 func (l *Listener) execCommand(conn net.Conn, name string, params []string) error {
@@ -141,6 +153,8 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 		go_logger.Logger.Info("received REGISTER_OK.")
 	} else if name == "REGISTER_FAIL" {
 		return fmt.Errorf("register error - %s", params[0])
+	} else if name == "ERROR" {
+		go_logger.Logger.ErrorF("connection error !!! - %s", params[0])
 	} else {
 		return errors.New("command error")
 	}
@@ -167,5 +181,5 @@ func (s *Listener) Exit() {
 }
 
 func (s *Listener) Clear() {
-
+	s.cancelFunc()
 }

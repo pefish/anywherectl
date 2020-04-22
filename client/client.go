@@ -27,7 +27,7 @@ func (c *Client) ParseFlagSet(flagSet *flag.FlagSet) {
 	}
 }
 
-func (c *Client) Start(finishChan chan <- bool, flagSet *flag.FlagSet) error {
+func (c *Client) Start(finishChan chan <- bool, flagSet *flag.FlagSet) {
 	c.finishChan = finishChan
 
 	//flagSet.String("tcp-address", opts.TCPAddress, "<addr>:<port> to listen on for TCP clients")
@@ -41,8 +41,6 @@ func (c *Client) Start(finishChan chan <- bool, flagSet *flag.FlagSet) error {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	return nil
 }
 
 func (c *Client) Exit() {

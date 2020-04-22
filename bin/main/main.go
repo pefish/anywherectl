@@ -59,7 +59,7 @@ func main() {
 type SubServerInterface interface {
 	DecorateFlagSet(flagSet *flag.FlagSet)
 	ParseFlagSet(flagset *flag.FlagSet)
-	Start(finishChan chan <- bool, flagSet *flag.FlagSet) error
+	Start(finishChan chan <- bool, flagSet *flag.FlagSet)
 	Exit()
 	Clear()
 }
