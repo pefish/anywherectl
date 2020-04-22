@@ -198,6 +198,13 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 
 			if packageData.Version != version.ProtocolVersion {
 				go_logger.Logger.ErrorF("CONN(%s): bad protocol version", conn.RemoteAddr())
+				sendErr := s.sendToListener(&ListenerConn{
+					conn:            conn,
+					sendCommandLock: sync.Mutex{},
+				}, "ERROR", []string{"bad protocol version"})
+				if sendErr != nil {
+					go_logger.Logger.WarnF("failed to exec ERROR command - %s", err)
+				}
 				goto exitConn
 			}
 
@@ -209,7 +216,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 					sendCommandLock: sync.Mutex{},
 				}, "ERROR", []string{"bad token"})
 				if sendErr != nil {
-					go_logger.Logger.WarnF("failed to exec REGISTER_FAIL command - %s", err)
+					go_logger.Logger.WarnF("failed to exec ERROR command - %s", err)
 				}
 				goto exitConn
 			}
