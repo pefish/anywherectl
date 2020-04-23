@@ -38,8 +38,9 @@ anywherectl -listener-name=pefish -listener-token=token_test -server-token=test_
 - [x] Shell command
 - [ ] Shell command auth between listener and client （listener对client的shell命令的权限校验）
 - [ ] Shell command stream （流式shell结果，比如top命令）
-- [ ] RESPONSE_SHELL (listener -> server)
 - [ ] Chunk transmission (数据量大是需要分chunk传输，才能继续保证tcp连接复用)
+- [ ] Download file
+- [ ] Upload file
 
 ## Security Vulnerabilities
 
