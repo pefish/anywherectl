@@ -19,8 +19,5 @@ func TestExecShell(t *testing.T) {
 	test.Nil(t, err)
 	test.Equal(t, "test\n0\n", result2)
 
-	result3, err := ExecShell(`top`)
-	test.Nil(t, err)
-	test.Equal(t, "test\n0\n", result3)
 }
 
