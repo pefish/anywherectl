@@ -35,7 +35,9 @@ anywherectl -listener-name=pefish -listener-token=token_test -server-token=test_
 - [x] REGISTER_FAIL command (server -> listener)
 - [x] Heartbeat between server and listeners (server与listener之间的心跳机制)
 - [x] Listener reconnection (listener重连server机制)
-- [ ] SHELL command (server -> listener)
+- [x] Shell command
+- [ ] Shell command auth between listener and client （listener对client的shell命令的权限校验）
+- [ ] Shell command stream （流式shell结果，比如top命令）
 - [ ] RESPONSE_SHELL (listener -> server)
 - [ ] Chunk transmission (数据量大是需要分chunk传输，才能继续保证tcp连接复用)
 

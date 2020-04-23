@@ -32,7 +32,6 @@ type Listener struct {
 func NewListener(name string) *Listener {
 	return &Listener{
 		Name:            name,
-		sendCommandLock: sync.Mutex{},
 		connExit:        make(chan bool, 1),
 	}
 }
@@ -83,21 +82,16 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 			l.serverConn = conn
 
 			// 开始接收消息
-			err := conn.SetReadDeadline(time.Now().Add(10 * time.Second)) // 设置tcp连接的读超时
-			if err != nil {
-				go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
-			}
-
 			ctx, cancel := context.WithCancel(context.Background())
 			l.cancelFunc = cancel
 			go l.receiveMessageLoop(ctx, conn)
 
 			// 开始注册
-			err = l.sendCommandToServer("REGISTER", []string{
+			err := l.sendCommandToServer("REGISTER", []string{
 				"cvc",
 			})
 			if err != nil {
-				go_logger.Logger.Error("write params to conn err - %s", err)
+				go_logger.Logger.Error("send command REGISTER err - %s", err)
 				l.Exit()
 				break
 			}
@@ -130,7 +124,7 @@ func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			go_logger.Logger.DebugF("received package '%#v'", packageData)
 			err = l.execCommand(conn, packageData.Command, packageData.Params)
 			if err != nil {
-				go_logger.Logger.ErrorF("failed to execCommand command - %s", err)
+				go_logger.Logger.ErrorF("received [%s] command - %s", packageData.Command, err)
 				goto exit
 			}
 		}
@@ -153,8 +147,25 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 		go_logger.Logger.Info("received REGISTER_OK.")
 	} else if name == "REGISTER_FAIL" {
 		return fmt.Errorf("register error - %s", params[0])
-	} else if name == "ERROR" {
-		go_logger.Logger.ErrorF("connection error !!! - %s", params[0])
+	} else if name == "TOKEN_ERROR" {
+		return errors.New("token error")
+	} else if name == "VERSION_ERROR" {
+		return errors.New("version error")
+	} else if name == "SHELL" {
+		// 权限校验 TODO
+		go_logger.Logger.InfoF("exec shell command %s", params[1])
+		result := "nothing"
+		resultTemp, err := ExecShell(params[1])
+		if err != nil {
+			go_logger.Logger.WarnF("exec shell command %s err - %s", params[1], err)
+			result = err.Error()
+		} else {
+			result = resultTemp
+		}
+		err = l.sendCommandToServer("SHELL_RESULT", []string{params[0], result})
+		if err != nil {
+			go_logger.Logger.WarnF("failed to exec SHELL_RESULT command - %s", err)
+		}
 	} else {
 		return errors.New("command error")
 	}

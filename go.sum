@@ -4,6 +4,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm40UhjYkI=
+github.com/google/uuid v1.1.1 h1:Gkbcsh/GbpXz7lPftLA3P6TYMwjCLYm83jiFQZF/3gY=
+github.com/google/uuid v1.1.1/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1 h1:mweAR1A6xJ3oS2pRaGiHgQ4OO8tzTaLawm8vnODuwDk=
 github.com/konsorten/go-windows-terminal-sequences v1.0.1/go.mod h1:T0+1ngSBFLxvqU3pZ+m/2kptfBszLMUkC4ZK/EgS/cQ=
@@ -12,10 +14,10 @@ github.com/kr/pretty v0.1.0/go.mod h1:dAy3ld7l9f0ibDNOQOHHMYYIIbhfbHSm3C4ZsoJORN
 github.com/kr/pty v1.1.1/go.mod h1:pFQYn66WHrOpPYNljwOMqo10TkYh1fy3cYio2l3bCsQ=
 github.com/kr/text v0.1.0 h1:45sCR5RtlFHMR4UwH9sdQ5TC8v0qDQCHnXt+kaKSTVE=
 github.com/kr/text v0.1.0/go.mod h1:4Jbv+DJW3UT/LiOwJeYQe1efqtUx/iVham/4vfdArNI=
-github.com/pefish/go-interface-logger v0.0.1 h1:HNbSqPOOlGCAT08YNVmbVUd/ZqqdoRQlwuuMzUdzHBc=
-github.com/pefish/go-interface-logger v0.0.1/go.mod h1:pK7ubPKzuo8oNyh3cXQPQDZiFvWeOZy6NW0Pba7soVI=
-github.com/pefish/go-logger v0.2.8 h1:lKlor4BjxzGnbAzOMFl+jASZ1ngptJV/oKrwxsqGn0Y=
-github.com/pefish/go-logger v0.2.8/go.mod h1:EAhUu1NuOBjLF+YCO80jdEJEsScJQ6y8vmNDhnAYXDs=
+github.com/pefish/go-interface-logger v0.0.3 h1:7SGcqkNcdjdgxP79aC+cU6Aoz2Moxc2C0vlIsd2J7cE=
+github.com/pefish/go-interface-logger v0.0.3/go.mod h1:pK7ubPKzuo8oNyh3cXQPQDZiFvWeOZy6NW0Pba7soVI=
+github.com/pefish/go-logger v0.2.9 h1:QubKjIkms+ybMXmu4B3Dcq3jTdPy9Es61hafg5T9ny8=
+github.com/pefish/go-logger v0.2.9/go.mod h1:sg2r6mmE/lSs/+yeT7HLm8XwWVM6eoUTmbfpJxlDPIE=
 github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
