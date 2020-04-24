@@ -11,6 +11,8 @@ import (
 	go_logger "github.com/pefish/go-logger"
 	"log"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 	"sync"
@@ -32,6 +34,7 @@ type Server struct {
 	listenerToken         string         // listener连接是需要的token
 	clientToken           string         // client连接时需要的token
 	tcpListener           net.Listener
+	pprofHttpServer       *http.Server
 	cancelFunc            context.CancelFunc
 	finishChan            chan<- bool
 	clientConnCache       sync.Map // map[string]net.Conn // 缓存的client连接
@@ -39,7 +42,7 @@ type Server struct {
 
 func NewServer() *Server {
 	return &Server{
-		heartbeatInterval:     5 * time.Second,
+		heartbeatInterval: 5 * time.Second,
 	}
 }
 
@@ -47,6 +50,8 @@ func (s *Server) DecorateFlagSet(flagSet *flag.FlagSet) {
 	flagSet.String("tcp-address", "0.0.0.0:8181", "<addr>:<port> to listen on for TCP clients")
 	flagSet.String("listener-token", "", "token for listeners")
 	flagSet.String("client-token", "", "token for clients")
+	flagSet.Bool("enable-pprof", false, "enable pprof")
+	flagSet.String("pprof-address", "0.0.0.0:9191", "<addr>:<port> to listen on for pprof")
 }
 
 func (s *Server) ParseFlagSet(flagSet *flag.FlagSet) {
@@ -90,6 +95,21 @@ func (s *Server) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 
 	s.wg.Add(1)
 	go s.acceptConnLoop(ctx)
+
+	pprofEnable := flagSet.Lookup("enable-pprof").Value.(flag.Getter).Get().(bool)
+	pprofAddress := flagSet.Lookup("pprof-address").Value.(flag.Getter).Get().(string)
+	if pprofEnable {
+		s.pprofHttpServer = &http.Server{Addr: pprofAddress}
+		s.wg.Add(1)
+		go func() {
+			go_logger.Logger.InfoF("starting pprof server on %s", pprofAddress)
+			err := s.pprofHttpServer.ListenAndServe()
+			if err != nil {
+				go_logger.Logger.WarnF("pprof server start error - %s", err)
+			}
+			s.wg.Done()
+		}()
+	}
 }
 
 func (s *Server) acceptConnLoop(ctx context.Context) {
@@ -142,10 +162,11 @@ func (s *Server) heartbeatLoop(ctx context.Context) {
 			})
 			timer.Reset(s.heartbeatInterval)
 		case <-ctx.Done():
-			goto exit
+			goto exitHeartbeatLoop
 		}
 	}
-exit:
+exitHeartbeatLoop:
+	timer.Stop()
 	go_logger.Logger.Info("SHUTDOWN: heartbeat.")
 	s.wg.Done()
 }
@@ -156,6 +177,9 @@ func (s *Server) Exit() {
 
 func (s *Server) Clear() {
 	s.tcpListener.Close()
+	if s.pprofHttpServer != nil {
+		s.pprofHttpServer.Shutdown(context.Background())
+	}
 	// 断开所有listener连接
 	s.listeners.Range(func(key, value interface{}) bool {
 		s.destroyListenerConn(value.(*ListenerConn).conn)
@@ -197,7 +221,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			if packageData.Version != version.ProtocolVersion {
 				go_logger.Logger.ErrorF("CONN(%s): bad protocol version", conn.RemoteAddr())
 				sendErr := s.sendToListener(&ListenerConn{
-					conn:            conn,
+					conn: conn,
 				}, "VERSION_ERROR", nil)
 				if sendErr != nil {
 					go_logger.Logger.WarnF("failed to exec ERROR command - %s", err)
@@ -209,7 +233,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			if packageData.ServerToken != s.listenerToken && packageData.ServerToken != s.clientToken {
 				go_logger.Logger.ErrorF("CONN(%s): bad token", conn.RemoteAddr())
 				sendErr := s.sendToListener(&ListenerConn{
-					conn:            conn,
+					conn: conn,
 				}, "TOKEN_ERROR", nil)
 				if sendErr != nil {
 					go_logger.Logger.WarnF("failed to exec ERROR command - %s", err)
@@ -225,7 +249,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				if !ok {
 					go_logger.Logger.ErrorF("client(%s): listener not found", conn.RemoteAddr())
 					sendErr := s.sendToListener(&ListenerConn{
-						conn:            conn,
+						conn: conn,
 					}, "LISTENER_NOT_FOUND", nil)
 					if sendErr != nil {
 						go_logger.Logger.WarnF("failed to exec LISTENER_NOT_FOUND command - %s", err)
@@ -249,11 +273,6 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 	}
 exitMessageLoop:
 	time.Sleep(2 * time.Second) // 延迟关闭，等待客户端处理消息完成，避免立马断开导致客户端不必要的重连
-	err = conn.Close()
-	if err != nil {
-		go_logger.Logger.DebugF("failed to close conn - %s", err)
-	}
-	go_logger.Logger.InfoF("CONN(%s): closed.", conn.RemoteAddr())
 	s.wg.Done()
 }
 
@@ -262,7 +281,7 @@ func (s *Server) execCommand(conn net.Conn, packageData *protocol.ProtocolPackag
 		listenerConn, err := s.cmdRegister(conn, packageData)
 		if err != nil {
 			tempListenerConn := &ListenerConn{
-				conn:            conn,
+				conn: conn,
 			}
 			sendErr := s.sendToListener(tempListenerConn, "REGISTER_FAIL", []string{err.Error()})
 			if sendErr != nil {
@@ -310,7 +329,10 @@ func (s *Server) destroyListenerConn(conn net.Conn) {
 	listenerNameInterface, _ := s.connIdListenerNameMap.Load(connId)
 	listenerName := listenerNameInterface.(string)
 	s.listeners.Delete(listenerName)
+	go_logger.Logger.DebugF("remove listeners succeed. key: %s", listenerName)
 	s.connIdListenerNameMap.Delete(connId)
+	go_logger.Logger.DebugF("remove connIdListenerNameMap succeed. key: %s", connId)
+	go_logger.Logger.InfoF("CONN(%s): closed.", conn.RemoteAddr())
 }
 
 func (s *Server) cmdRegister(conn net.Conn, packageData *protocol.ProtocolPackage) (*ListenerConn, error) {
@@ -323,11 +345,13 @@ func (s *Server) cmdRegister(conn net.Conn, packageData *protocol.ProtocolPackag
 		s.destroyListenerConn(listenerConn.(*ListenerConn).conn)
 	}
 	listenerConn := &ListenerConn{
-		listener:        listener.NewListener(packageData.ListenerName),
-		conn:            conn,
+		listener: listener.NewListener(packageData.ListenerName),
+		conn:     conn,
 	}
 	s.listeners.Store(packageData.ListenerName, listenerConn)
+	go_logger.Logger.DebugF("save listeners succeed. key: %s", packageData.ListenerName)
 	s.connIdListenerNameMap.Store(conn.RemoteAddr().String(), packageData.ListenerName)
+	go_logger.Logger.DebugF("save connIdListenerNameMap succeed. key: %s, value: %s", conn.RemoteAddr().String(), packageData.ListenerName)
 	return listenerConn, nil
 }
 

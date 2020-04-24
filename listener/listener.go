@@ -10,6 +10,8 @@ import (
 	go_logger "github.com/pefish/go-logger"
 	"log"
 	"net"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"strings"
 	"sync"
@@ -26,13 +28,13 @@ type Listener struct {
 	cancelFunc      context.CancelFunc
 	finishChan      chan<- bool
 	name            string
-	isReconnectChan chan <- bool
+	isReconnectChan chan<- bool
 }
 
 func NewListener(name string) *Listener {
 	return &Listener{
-		Name:            name,
-		connExit:        make(chan bool, 1),
+		Name:     name,
+		connExit: make(chan bool, 1),
 	}
 }
 
@@ -41,6 +43,8 @@ func (s *Listener) DecorateFlagSet(flagSet *flag.FlagSet) {
 	flagSet.String("name", "pefish", "listener name")
 	flagSet.String("server-token", "", "server token to connect. max length 32")
 	flagSet.String("server-address", "0.0.0.0:8181", "server address to connect")
+	flagSet.Bool("enable-pprof", false, "enable pprof")
+	flagSet.String("pprof-address", "0.0.0.0:9191", "<addr>:<port> to listen on for pprof")
 }
 
 func (s *Listener) ParseFlagSet(flagSet *flag.FlagSet) {
@@ -77,7 +81,7 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 
 	go func() {
 		for {
-			conn := <- connChan
+			conn := <-connChan
 			go_logger.Logger.InfoF("server '%s' connected!! start register...", conn.RemoteAddr())
 			l.serverConn = conn
 
@@ -98,6 +102,17 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 		}
 	}()
 
+	pprofEnable := flagSet.Lookup("enable-pprof").Value.(flag.Getter).Get().(bool)
+	pprofAddress := flagSet.Lookup("pprof-address").Value.(flag.Getter).Get().(string)
+	if pprofEnable {
+		go func() {
+			go_logger.Logger.InfoF("starting pprof server on %s", pprofAddress)
+			err := http.ListenAndServe(pprofAddress, nil)
+			if err != nil {
+				go_logger.Logger.WarnF("pprof server start error - %s", err)
+			}
+		}()
+	}
 }
 
 func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {

@@ -23,7 +23,7 @@ func (rm *ReconnectManager) Reconnect(addr string) (<- chan net.Conn, chan <- bo
 		timer := time.NewTimer(0)
 		for {
 			select {
-			case <- isReconnectChan:
+			case <- isReconnectChan:  // 连接成功后卡这里，等待重连信号
 				timer.Reset(rm.reconnectionInterval)
 			case <- timer.C:
 				go_logger.Logger.InfoF("connecting server %s...", addr)
