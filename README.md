@@ -9,19 +9,19 @@ Anywherectl is a tool to remote control anything. Enjoy it !!!
 ### Start Server
 
 ```shell script
-anywherectl serve -tcp-address=0.0.0.0:8181 -listener-token=test_token -client-token=test -log-level=debug
+anywherectl serve --listener-token=test_token --client-token=test
 ```
 
 ### Start Listener
 
 ```shell script
-anywherectl listen -name=pefish -server-token=test_token -server-address=0.0.0.0:8181 -config=/path/to/config.yaml
+anywherectl listen --server-token=test_token --server-address=0.0.0.0:8181 --name=pefish
 ```
 
 ### Exec "ls" shell
 
 ```shell script
-anywherectl -listener-name=pefish -listener-token=token_test -server-token=test_token -server-address=0.0.0.0:8181 -action=shell -data=ls
+anywherectl --listener-name=pefish --listener-token=token_test --server-token=test --server-address=0.0.0.0:8181 --action=shell --data=ls
 ```
 
 ## Document
