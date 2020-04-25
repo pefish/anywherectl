@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/pefish/go-config"
 )
 
 type Listener struct {
@@ -56,8 +57,28 @@ func (s *Listener) ParseFlagSet(flagSet *flag.FlagSet) {
 
 func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 	l.finishChan = finishChan
+	ctx, cancel := context.WithCancel(context.Background())
+	l.cancelFunc = cancel
 
-	serverToken := flagSet.Lookup("server-token").Value.(flag.Getter).Get().(string)
+	configFile := flagSet.Lookup("config").Value.(flag.Getter).Get().(string)
+	err := go_config.Config.LoadYamlConfig(go_config.Configuration{
+		ConfigFilepath: configFile,
+	})
+	if err != nil {
+		go_logger.Logger.Error("load config file error")
+		l.Exit()
+		return
+	}
+	go_config.Config.MergeFlagSet(flagSet)
+
+	go_logger.Logger.DebugF("configs: %#v", go_config.Config.GetAll())
+
+	serverToken, err := go_config.Config.GetString("server-token")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		l.Exit()
+		return
+	}
 	if serverToken == "" {
 		go_logger.Logger.Error("server token must be set")
 		l.Exit()
@@ -70,10 +91,20 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 	}
 	l.serverToken = serverToken
 
-	serverAddress := flagSet.Lookup("server-address").Value.(flag.Getter).Get().(string)
+	serverAddress, err := go_config.Config.GetString("server-address")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		l.Exit()
+		return
+	}
 	l.serverAddress = serverAddress
 
-	l.name = flagSet.Lookup("name").Value.(flag.Getter).Get().(string)
+	l.name, err = go_config.Config.GetString("name")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		l.Exit()
+		return
+	}
 	// 连接服务器
 	rm := NewReconnectManager()
 	connChan, isReconnectChan := rm.Reconnect(l.serverAddress)
@@ -86,8 +117,6 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 			l.serverConn = conn
 
 			// 开始接收消息
-			ctx, cancel := context.WithCancel(context.Background())
-			l.cancelFunc = cancel
 			go l.receiveMessageLoop(ctx, conn)
 
 			// 开始注册

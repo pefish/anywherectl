@@ -1,0 +1,8 @@
+name: test
+auth:
+  token1:
+    - ls
+    - whoami
+    - pwd
+  token2:
+    - dir
