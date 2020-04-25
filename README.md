@@ -15,7 +15,7 @@ anywherectl serve --listener-token=test_token --client-token=test
 ### Start Listener
 
 ```shell script
-anywherectl listen --server-token=test_token --server-address=0.0.0.0:8181 --name=pefish
+anywherectl listen --server-token=test_token --server-address=0.0.0.0:8181 --name=pefish --config=/path/to/config/file
 ```
 
 ### Exec "ls" shell
