@@ -50,6 +50,12 @@ Building **anywherectl** requires both a Go (version 1.13 or later). Once the de
 make
 ```
 
+## Build docker image
+
+```shell script
+docker build -t pefish/anywherectl:v1.1 .
+```
+
 ## Security Vulnerabilities
 
 If you discover a security vulnerability, please send an e-mail to [pefish@qq.com](mailto:pefish@qq.com). All security vulnerabilities will be promptly addressed.
