@@ -42,6 +42,14 @@ anywherectl --listener-name=pefish --listener-token=token_test --server-token=te
 - [ ] Download file
 - [ ] Upload file
 
+## Building the source
+
+Building **anywherectl** requires both a Go (version 1.13 or later). Once the dependencies are installed, run
+
+```shell script
+make
+```
+
 ## Security Vulnerabilities
 
 If you discover a security vulnerability, please send an e-mail to [pefish@qq.com](mailto:pefish@qq.com). All security vulnerabilities will be promptly addressed.

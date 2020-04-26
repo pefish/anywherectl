@@ -1,15 +1,11 @@
 
 DEFAULT: all
 
-BLDDIR = build
-APPS = main
+GORUN = env GO111MODULE=on go run
 
-$(BLDDIR)/main: $(wildcard ./bin/main/*.go ./*/*.go)
 
-all: $(APPS)
+all:
+	$(GORUN) internal/build-bin/build_bin.go install
 
-$(BLDDIR)/%:
-	@mkdir -p $(dir $@)
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -installsuffix cgo -a -tags netgo -ldflags '-w -extldflags "-static"' -o $@ ./bin/$*
-
-$(APPS): %: $(BLDDIR)/%
+build-pack:
+	$(GORUN) internal/build-bin/build_bin.go install-pack
