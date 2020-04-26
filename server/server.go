@@ -9,6 +9,7 @@ import (
 	"github.com/pefish/anywherectl/internal/protocol"
 	"github.com/pefish/anywherectl/internal/version"
 	"github.com/pefish/anywherectl/listener"
+	go_config "github.com/pefish/go-config"
 	go_logger "github.com/pefish/go-logger"
 	go_reflect "github.com/pefish/go-reflect"
 	"log"
@@ -66,21 +67,33 @@ func (s *Server) ParseFlagSet(flagSet *flag.FlagSet) {
 func (s *Server) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 	s.finishChan = finishChan
 
-	listenerToken := flagSet.Lookup("listener-token").Value.(flag.Getter).Get().(string)
+	listenerToken, err := go_config.Config.GetString("listener-token")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		return
+	}
 	if listenerToken == "" {
 		go_logger.Logger.Error("listener token must be set")
 		return
 	}
 	s.listenerToken = listenerToken
 
-	clientToken := flagSet.Lookup("client-token").Value.(flag.Getter).Get().(string)
+	clientToken, err := go_config.Config.GetString("client-token")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		return
+	}
 	if clientToken == "" {
 		go_logger.Logger.Error("client token must be set")
 		return
 	}
 	s.clientToken = clientToken
 
-	tcpAddress := flagSet.Lookup("tcp-address").Value.(flag.Getter).Get().(string)
+	tcpAddress, err := go_config.Config.GetString("tcp-address")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		return
+	}
 	tcpListener, err := net.Listen("tcp", tcpAddress)
 	if err != nil {
 		go_logger.Logger.ErrorF("listen (%s) failed - %s", tcpAddress, err)
@@ -98,8 +111,16 @@ func (s *Server) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 	s.wg.Add(1)
 	go s.acceptConnLoop(ctx)
 
-	pprofEnable := flagSet.Lookup("enable-pprof").Value.(flag.Getter).Get().(bool)
-	pprofAddress := flagSet.Lookup("pprof-address").Value.(flag.Getter).Get().(string)
+	pprofEnable, err := go_config.Config.GetBool("enable-pprof")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		return
+	}
+	pprofAddress, err := go_config.Config.GetString("pprof-address")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		return
+	}
 	if pprofEnable {
 		s.pprofHttpServer = &http.Server{Addr: pprofAddress}
 		s.wg.Add(1)

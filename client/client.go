@@ -5,6 +5,7 @@ import (
 	"flag"
 	"github.com/pefish/anywherectl/internal/protocol"
 	"github.com/pefish/anywherectl/internal/version"
+	go_config "github.com/pefish/go-config"
 	go_logger "github.com/pefish/go-logger"
 	"log"
 	"net"
@@ -42,7 +43,12 @@ func (c *Client) ParseFlagSet(flagSet *flag.FlagSet) {
 func (c *Client) Start(finishChan chan <- bool, flagSet *flag.FlagSet) {
 	c.finishChan = finishChan
 
-	serverToken := flagSet.Lookup("server-token").Value.(flag.Getter).Get().(string)
+	serverToken, err := go_config.Config.GetString("server-token")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		c.Exit()
+		return
+	}
 	if serverToken == "" {
 		go_logger.Logger.Error("server token must be set")
 		c.Exit()
@@ -54,32 +60,55 @@ func (c *Client) Start(finishChan chan <- bool, flagSet *flag.FlagSet) {
 		return
 	}
 
-	serverAddress := flagSet.Lookup("server-address").Value.(flag.Getter).Get().(string)
+	serverAddress, err := go_config.Config.GetString("server-address")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		c.Exit()
+		return
+	}
 
-	listenerName := flagSet.Lookup("listener-name").Value.(flag.Getter).Get().(string)
+	listenerName, err := go_config.Config.GetString("listener-name")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		c.Exit()
+		return
+	}
 	if listenerName == "" {
 		go_logger.Logger.Error("listener name must be set")
 		c.Exit()
 		return
 	}
 
-	listenerToken := flagSet.Lookup("listener-token").Value.(flag.Getter).Get().(string)
+	listenerToken, err := go_config.Config.GetString("listener-token")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		c.Exit()
+		return
+	}
 	if listenerToken == "" {
 		go_logger.Logger.Error("listener token must be set")
 		c.Exit()
 		return
 	}
 
-	action := flagSet.Lookup("action").Value.(flag.Getter).Get().(string)
+	action, err := go_config.Config.GetString("action")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		c.Exit()
+		return
+	}
 	if action == "" {
 		go_logger.Logger.Error("action must be set")
 		c.Exit()
 		return
 	}
 
-	data := flagSet.Lookup("data").Value.(flag.Getter).Get().(string)
-
-
+	data, err := go_config.Config.GetString("data")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		c.Exit()
+		return
+	}
 
 	go_logger.Logger.InfoF("connecting server %s...", serverAddress)
 	conn, err := net.Dial("tcp", serverAddress)

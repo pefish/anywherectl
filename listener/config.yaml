@@ -1,4 +1,4 @@
-name: test
+name: pefish
 auth:
   token1:
     - ls
@@ -9,3 +9,5 @@ auth:
   token_test:
     - ls
     - 88
+log-level: debug
+server-token: test_token

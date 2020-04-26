@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/pefish/anywherectl/internal/protocol"
 	"github.com/pefish/anywherectl/internal/version"
+	"github.com/pefish/anywherectl/listener/shell"
 	"github.com/pefish/go-config"
 	go_logger "github.com/pefish/go-logger"
 	"log"
@@ -42,7 +43,6 @@ func NewListener(name string) *Listener {
 }
 
 func (s *Listener) DecorateFlagSet(flagSet *flag.FlagSet) {
-	flagSet.String("config", "", "path to config file")
 	flagSet.String("name", "pefish", "listener name")
 	flagSet.String("server-token", "", "server token to connect. max length 32")
 	flagSet.String("server-address", "0.0.0.0:8181", "server address to connect")
@@ -61,17 +61,6 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 	l.finishChan = finishChan
 	ctx, cancel := context.WithCancel(context.Background())
 	l.cancelFunc = cancel
-
-	configFile := flagSet.Lookup("config").Value.(flag.Getter).Get().(string)
-	err := go_config.Config.LoadYamlConfig(go_config.Configuration{
-		ConfigFilepath: configFile,
-	})
-	if err != nil {
-		go_logger.Logger.Error("load config file error")
-		l.Exit()
-		return
-	}
-	go_config.Config.MergeFlagSet(flagSet)
 
 	go_logger.Logger.DebugF("configs: %#v", go_config.Config.GetAll())
 
@@ -148,8 +137,18 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 		}
 	}()
 
-	pprofEnable := flagSet.Lookup("enable-pprof").Value.(flag.Getter).Get().(bool)
-	pprofAddress := flagSet.Lookup("pprof-address").Value.(flag.Getter).Get().(string)
+	pprofEnable, err := go_config.Config.GetBool("enable-pprof")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		l.Exit()
+		return
+	}
+	pprofAddress, err := go_config.Config.GetString("pprof-address")
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		l.Exit()
+		return
+	}
 	if pprofEnable {
 		go func() {
 			go_logger.Logger.InfoF("starting pprof server on %s", pprofAddress)
@@ -216,7 +215,7 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 		// 权限校验 TODO
 		go_logger.Logger.InfoF("exec shell command %s", params[1])
 		result := "nothing"
-		resultTemp, err := ExecShell(params[1])
+		resultTemp, err := shell.ExecShell(params[1])
 		if err != nil {
 			go_logger.Logger.WarnF("exec shell command %s err - %s", params[1], err)
 			result = err.Error()

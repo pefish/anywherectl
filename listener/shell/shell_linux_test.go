@@ -1,4 +1,4 @@
-package listener
+package shell
 
 import (
 	"github.com/pefish/anywherectl/internal/test"
