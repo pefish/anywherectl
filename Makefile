@@ -1,11 +1,17 @@
 
-DEFAULT: all
+DEFAULT: build-cur
 
 GORUN = env GO111MODULE=on go run
 
 
-all:
-	$(GORUN) internal/build-bin/build_bin.go install
+build-cur:
+	$(GORUN) internal/build-bin/build_bin.go build-cur
 
-build-pack:
-	$(GORUN) internal/build-bin/build_bin.go install-pack
+build-cur-pack:
+	$(GORUN) internal/build-bin/build_bin.go build-cur-pack
+
+build-all:
+	$(GORUN) internal/build-bin/build_bin.go build-all
+
+build-all-pack:
+	$(GORUN) internal/build-bin/build_bin.go build-all-pack

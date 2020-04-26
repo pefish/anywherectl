@@ -50,6 +50,12 @@ Building **anywherectl** requires both a Go (version 1.13 or later). Once the de
 make
 ```
 
+If you want to build for any other platform binary, just do
+
+```shell script
+make build-all
+```
+
 ## Build docker image
 
 ```shell script
