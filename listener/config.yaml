@@ -6,3 +6,6 @@ auth:
     - pwd
   token2:
     - dir
+  token_test:
+    - ls
+    - 88

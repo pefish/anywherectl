@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/google/uuid"
@@ -9,6 +10,7 @@ import (
 	"github.com/pefish/anywherectl/internal/version"
 	"github.com/pefish/anywherectl/listener"
 	go_logger "github.com/pefish/go-logger"
+	go_reflect "github.com/pefish/go-reflect"
 	"log"
 	"net"
 	"net/http"
@@ -242,8 +244,6 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			}
 			if packageData.ServerToken == s.clientToken { // client连接
 				go_logger.Logger.InfoF("client(%s) connected.", conn.RemoteAddr())
-				// 权限校验 TODO
-
 				// 加上client id转发
 				listenerConnI, ok := s.listeners.Load(packageData.ListenerName)
 				if !ok {
@@ -252,11 +252,36 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 						conn: conn,
 					}, "LISTENER_NOT_FOUND", nil)
 					if sendErr != nil {
-						go_logger.Logger.WarnF("failed to exec LISTENER_NOT_FOUND command - %s", err)
+						go_logger.Logger.WarnF("failed to send LISTENER_NOT_FOUND - %s", err)
 					}
 					goto exitMessageLoop
 				}
 				listenerConn := listenerConnI.(*ListenerConn)
+				// 如果是SHELL命令，则权限校验
+				authPass := false
+				if packageData.Command == "SHELL" {
+					shellsI, ok := listenerConn.listener.ClientTokens[packageData.ListenerToken]
+					if ok {
+						shellsSlice := shellsI.([]interface{})
+						for _, shellI := range shellsSlice {
+							shellStr, err := go_reflect.Reflect.ToString(shellI)
+							if err == nil && shellStr == packageData.Params[0] {
+								authPass = true
+								break
+							}
+						}
+					}
+				}
+				if authPass == false {
+					go_logger.Logger.ErrorF("client(%s): UNAUTHORIZE.", conn.RemoteAddr())
+					sendErr := s.sendToListener(&ListenerConn{
+						conn: conn,
+					}, "UNAUTHORIZE", nil)
+					if sendErr != nil {
+						go_logger.Logger.WarnF("failed to send UNAUTHORIZE - %s", err)
+					}
+					goto exitMessageLoop
+				}
 
 				uuidStr := uuid.New().String()
 				s.clientConnCache.Store(uuidStr, conn)
@@ -339,13 +364,20 @@ func (s *Server) cmdRegister(conn net.Conn, packageData *protocol.ProtocolPackag
 	if len(packageData.Params) != 1 {
 		return nil, fmt.Errorf("cmdRegister param length error. length: %d", len(packageData.Params))
 	}
-	//clientTokensStr := packageData.Params[0]
 	// 保存连接
 	if listenerConn, ok := s.listeners.Load(packageData.ListenerName); ok { // 已经存在的话，就断开老的连接
 		s.destroyListenerConn(listenerConn.(*ListenerConn).conn)
 	}
+	clientTokensMap := make(map[string]interface{})
+	err := json.Unmarshal([]byte(packageData.Params[0]), &clientTokensMap)
+	if err != nil {
+		return nil, fmt.Errorf("json.Unmarshal client tokens error - %s", err)
+	}
 	listenerConn := &ListenerConn{
-		listener: listener.NewListener(packageData.ListenerName),
+		listener: &listener.Listener{
+			Name: packageData.ListenerName,
+			ClientTokens: clientTokensMap,
+		},
 		conn:     conn,
 	}
 	s.listeners.Store(packageData.ListenerName, listenerConn)

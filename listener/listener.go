@@ -2,11 +2,13 @@ package listener
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"github.com/pefish/anywherectl/internal/protocol"
 	"github.com/pefish/anywherectl/internal/version"
+	"github.com/pefish/go-config"
 	go_logger "github.com/pefish/go-logger"
 	"log"
 	"net"
@@ -16,7 +18,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"github.com/pefish/go-config"
 )
 
 type Listener struct {
@@ -30,6 +31,7 @@ type Listener struct {
 	finishChan      chan<- bool
 	name            string
 	isReconnectChan chan<- bool
+	ClientTokens    map[string]interface{}
 }
 
 func NewListener(name string) *Listener {
@@ -105,6 +107,14 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 		l.Exit()
 		return
 	}
+
+	l.ClientTokens, err = go_config.Config.GetMapDefault("auth", make(map[string]interface{}))
+	if err != nil {
+		go_logger.Logger.ErrorF("get config error - %s", err)
+		l.Exit()
+		return
+	}
+
 	// 连接服务器
 	rm := NewReconnectManager()
 	connChan, isReconnectChan := rm.Reconnect(l.serverAddress)
@@ -120,8 +130,15 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 			go l.receiveMessageLoop(ctx, conn)
 
 			// 开始注册
-			err := l.sendCommandToServer("REGISTER", []string{
-				"cvc",
+
+			tokensDataStr, err := json.Marshal(l.ClientTokens)
+			if err != nil {
+				go_logger.Logger.Error("json.Marshal ClientTokens err - %s", err)
+				l.Exit()
+				break
+			}
+			err = l.sendCommandToServer("REGISTER", []string{
+				string(tokensDataStr),
 			})
 			if err != nil {
 				go_logger.Logger.Error("send command REGISTER err - %s", err)
