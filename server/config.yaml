@@ -1,0 +1,4 @@
+listener-token: test_token
+client-token: test
+log-level: debug
+tcp-address: 0.0.0.0:8181

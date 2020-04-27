@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"flag"
+	"fmt"
 	"github.com/pefish/anywherectl/internal/protocol"
 	"github.com/pefish/anywherectl/internal/version"
 	go_config "github.com/pefish/go-config"
@@ -163,7 +164,7 @@ func (c *Client) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				go_logger.Logger.ErrorF("received [%s] command, it is illegal.", packageData.Command)
 				goto exit
 			}
-			go_logger.Logger.Info(packageData.Params[0])
+			fmt.Println(packageData.Params[0])
 			goto exit
 		}
 

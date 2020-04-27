@@ -1,0 +1,5 @@
+listener-name: pefish
+log-level: warn
+listener-token: token1
+server-token: test
+server-address: 0.0.0.0:8181

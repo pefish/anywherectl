@@ -4,6 +4,7 @@ auth:
     - ls
     - whoami
     - pwd
+    - kubectl get pods
   token2:
     - dir
   token_test:
@@ -11,3 +12,4 @@ auth:
     - 88
 log-level: debug
 server-token: test_token
+server-address: 0.0.0.0:8181

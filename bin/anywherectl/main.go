@@ -29,7 +29,7 @@ func main() {
 	flagSet := flag.NewFlagSet(version.AppName, flag.ExitOnError)
 
 	flagSet.Bool("version", false, "print version string")
-	flagSet.String("log-level", "info", "set log verbosity: debug, info, warn, or error")
+	flagSet.String("log-level", "warn", "set log verbosity: debug, info, warn, or error")
 	flagSet.String("config", "", "path to config file")
 
 	subServer.DecorateFlagSet(flagSet)
