@@ -2,8 +2,8 @@
 
 package shell
 
-var ErrNotImplemented = errors.New("raw: not implemented")
+var ErrNotImplemented = errors.New("shell: not implemented")
 
-func ExecShell(s string) (string, error) {
-	return "", ErrNotImplemented
+func GetCmd(s string) (*exec.Cmd, error) {
+	return nil, ErrNotImplemented
 }

@@ -6,7 +6,9 @@ auth:
     - pwd
     - "kubectl get *"
     - "kubectl describe pod *"
+    - "kubectl logs *"
     - top
+    - "tail *"
   token2:
     - dir
   token_test:

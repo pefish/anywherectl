@@ -160,12 +160,20 @@ func (c *Client) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				goto exit
 			}
 			go_logger.Logger.DebugF("received package '%#v'", packageData)
-			if packageData.Command != "RESULT" {
+			if packageData.Command == "RESULT" {
+				if packageData.Params[0] == "1" {
+					fmt.Println(packageData.Params[1])
+				} else if packageData.Params[0] == "2" {
+					go_logger.Logger.DebugF("[%s] command over.", packageData.Command)
+					goto exit
+				} else {
+					go_logger.Logger.DebugF("[%s] command error.", packageData.Command)
+					goto exit
+				}
+			} else {
 				go_logger.Logger.ErrorF("received [%s] command, it is illegal.", packageData.Command)
 				goto exit
 			}
-			fmt.Println(packageData.Params[0])
-			goto exit
 		}
 
 	}
@@ -179,5 +187,7 @@ func (c *Client) Exit() {
 }
 
 func (c *Client) Clear() {
-	c.cancelFunc()
+	if c.cancelFunc != nil {
+		c.cancelFunc()
+	}
 }

@@ -1,6 +1,7 @@
 package listener
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,12 +12,12 @@ import (
 	"github.com/pefish/anywherectl/listener/shell"
 	"github.com/pefish/go-config"
 	go_logger "github.com/pefish/go-logger"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,11 @@ type Listener struct {
 	name            string
 	isReconnectChan chan<- bool
 	ClientTokens    map[string]interface{}
+	clientActions   sync.Map // 保存client的所有action。map[string]ActionData
+}
+
+type ActionData struct {
+	exitActionChan chan bool
 }
 
 func NewListener(name string) *Listener {
@@ -167,9 +173,12 @@ func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 	if err != nil {
 		go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
 	}
+	isExitLoop := make(chan bool, 1)
 	for {
 		select {
 		case <-ctx.Done():
+			goto exit
+		case <- isExitLoop:
 			goto exit
 		default:
 			packageData, err := protocol.ReadPackage(conn)
@@ -183,11 +192,14 @@ func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				goto exit
 			}
 			go_logger.Logger.DebugF("received package '%#v'", packageData)
-			err = l.execCommand(conn, packageData.Command, packageData.Params)
-			if err != nil {
-				go_logger.Logger.ErrorF("received [%s] command - %s", packageData.Command, err)
-				goto exit
-			}
+
+			go func() {
+				err = l.execCommand(conn, packageData.Command, packageData.Params)
+				if err != nil {
+					go_logger.Logger.ErrorF("exec [%s] command err - %s", packageData.Command, err)
+					close(isExitLoop)
+				}
+			}()
 		}
 
 	}
@@ -198,6 +210,7 @@ exitMessageLoop:
 	conn.Close()
 }
 
+// if return error, conn between listener and server will be closed.
 func (l *Listener) execCommand(conn net.Conn, name string, params []string) error {
 	if name == "PING" {
 		err := l.sendCommandToServer("PONG", nil)
@@ -212,35 +225,65 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 		return errors.New("token error")
 	} else if name == "VERSION_ERROR" {
 		return errors.New("version error")
+	} else if name == "CLIENT_CLOSED" {
+		clientId := params[0]
+		re, ok := l.clientActions.Load(clientId)
+		if ok {
+			actionData := re.(*ActionData)
+			close(actionData.exitActionChan)
+			l.clientActions.Delete(clientId)
+		}
 	} else if name == "SHELL" {
-		go_logger.Logger.InfoF("exec shell command %s", params[1])
-		result := "nothing"
-		execResultChan := make(chan string, 1)
-		cmd := new(exec.Cmd)
+		clientId := params[0]
+		go_logger.Logger.InfoF("exec shell command [%s]", params[1])
+		cmd, err := shell.GetCmd(params[1])
+		if err != nil {
+			go_logger.Logger.WarnF("failed to get cmd instance - %s", err)
+			return nil
+		}
+		reader_, err := cmd.StdoutPipe()
+		if err != nil {
+			go_logger.Logger.WarnF("failed to StdoutPipe - %s", err)
+			return nil
+		}
+		err = cmd.Start()
+		if err != nil {
+			go_logger.Logger.WarnF("failed to cmd.Start - %s", err)
+			return nil
+		}
+		actionData := &ActionData{
+			exitActionChan: make(chan bool, 1),
+		}
+		l.clientActions.Store(clientId, actionData)
+		reader := bufio.NewReader(reader_)
+
+		// 启动定时器监控ReadLine情况，30s没数据强制关闭进程
+		timer := time.NewTimer(0)
 		go func() {
-			resultTemp, err := shell.ExecShell(cmd, params[1])
-			if err != nil {
-				go_logger.Logger.WarnF("exec shell command %s err - %s", params[1], err)
-				execResultChan <- err.Error()
-			} else {
-				execResultChan <- resultTemp
+			for {
+				select {
+				case <- timer.C: // 持续没有新数据，会触发这里过期
+					go_logger.Logger.Warn("ReadLine timeout, kill cmd process")
+					cmd.Process.Kill()
+				}
+				timer.Stop()
+				break
 			}
 		}()
-		select {  // 等待执行结果，超时则杀掉进程
-		case <- time.After(10 * time.Second):
-			go_logger.Logger.WarnF("exec shell command %s timeout", params[1])
-			result = "exec shell timeout"
-			fmt.Println("11", cmd)
-			err := cmd.Process.Kill()
-			if err != nil {
-				go_logger.Logger.WarnF("shell process kill error - %s", err)
-			}
-		case result = <- execResultChan:
-		}
+		for {
+			timer.Reset(30 * time.Second)
 
-		err := l.sendCommandToServer("SHELL_RESULT", []string{params[0], result})
-		if err != nil {
-			go_logger.Logger.WarnF("failed to exec SHELL_RESULT command - %s", err)
+			line, _, err := reader.ReadLine()
+			if err != nil {
+				if err == io.EOF {
+					go_logger.Logger.DebugF("end to ReadLine - %s", err)
+					l.sendCommandToServer("SHELL_RESULT", []string{params[0], "2", string(line)})
+					return nil
+				}
+				go_logger.Logger.WarnF("error to ReadLine - %s", err)
+				return nil
+			}
+			l.sendCommandToServer("SHELL_RESULT", []string{params[0], "1", string(line)})
 		}
 	} else {
 		return errors.New("command error")

@@ -37,7 +37,7 @@ anywherectl --listener-name=pefish --listener-token=token_test --server-token=te
 - [x] Listener reconnection (listener重连server机制)
 - [x] Shell command
 - [x] Shell command auth between listener and client （listener对client的shell命令的权限校验）
-- [ ] Shell command stream （流式shell结果，比如top命令）
+- [x] Shell command stream （流式shell结果，比如top命令）
 - [ ] Chunk transmission (数据量大是需要分chunk传输，才能继续保证tcp连接复用)
 - [ ] Download file
 - [ ] Upload file

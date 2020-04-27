@@ -3,34 +3,9 @@
 package shell
 
 import (
-	"bytes"
 	"os/exec"
 )
 
-// 阻塞式执行shell命令，等待执行完毕并返回结果
-func ExecShell(cmd *exec.Cmd, s string) (string, error) {
-	*cmd = *exec.Command("/bin/bash", "-c", s)
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	if err := cmd.Start(); err != nil {
-		return "", err
-	}
-	err := cmd.Wait()
-	if err != nil {
-		return ``, err
-	}
-	return out.String(), err
+func GetCmd(s string) (*exec.Cmd, error) {
+	return exec.Command("/bin/bash", "-c", s), nil
 }
-
-
-//func ExecShellStream(s string) {
-//	cmd := exec.Command("/bin/bash", "-c", s)
-//	reader_, _ := cmd.StdoutPipe()
-//	cmd.Start()
-//	reader := bufio.NewReader(reader_)
-//	for {
-//		line, _, _ := reader.ReadLine()
-//		fmt.Println(string(line))
-//	}
-//	cmd.Wait()
-//}
