@@ -46,7 +46,7 @@ type Server struct {
 
 func NewServer() *Server {
 	return &Server{
-		heartbeatInterval: 5 * time.Second,
+		heartbeatInterval: 20 * time.Second,
 	}
 }
 

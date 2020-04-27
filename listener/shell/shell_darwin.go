@@ -8,11 +8,14 @@ import (
 )
 
 // 阻塞式执行shell命令，等待执行完毕并返回结果
-func ExecShell(s string) (string, error) {
-	cmd := exec.Command("/bin/bash", "-c", s)
+func ExecShell(cmd *exec.Cmd, s string) (string, error) {
+	*cmd = *exec.Command("/bin/bash", "-c", s)
 	var out bytes.Buffer
 	cmd.Stdout = &out
-	err := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+	err := cmd.Wait()
 	if err != nil {
 		return ``, err
 	}

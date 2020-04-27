@@ -16,6 +16,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -212,17 +213,32 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 	} else if name == "VERSION_ERROR" {
 		return errors.New("version error")
 	} else if name == "SHELL" {
-		// 权限校验 TODO
 		go_logger.Logger.InfoF("exec shell command %s", params[1])
 		result := "nothing"
-		resultTemp, err := shell.ExecShell(params[1])
-		if err != nil {
-			go_logger.Logger.WarnF("exec shell command %s err - %s", params[1], err)
-			result = err.Error()
-		} else {
-			result = resultTemp
+		execResultChan := make(chan string, 1)
+		cmd := new(exec.Cmd)
+		go func() {
+			resultTemp, err := shell.ExecShell(cmd, params[1])
+			if err != nil {
+				go_logger.Logger.WarnF("exec shell command %s err - %s", params[1], err)
+				execResultChan <- err.Error()
+			} else {
+				execResultChan <- resultTemp
+			}
+		}()
+		select {  // 等待执行结果，超时则杀掉进程
+		case <- time.After(10 * time.Second):
+			go_logger.Logger.WarnF("exec shell command %s timeout", params[1])
+			result = "exec shell timeout"
+			fmt.Println("11", cmd)
+			err := cmd.Process.Kill()
+			if err != nil {
+				go_logger.Logger.WarnF("shell process kill error - %s", err)
+			}
+		case result = <- execResultChan:
 		}
-		err = l.sendCommandToServer("SHELL_RESULT", []string{params[0], result})
+
+		err := l.sendCommandToServer("SHELL_RESULT", []string{params[0], result})
 		if err != nil {
 			go_logger.Logger.WarnF("failed to exec SHELL_RESULT command - %s", err)
 		}
