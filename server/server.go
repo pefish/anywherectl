@@ -17,6 +17,7 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -286,7 +287,8 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 						shellsSlice := shellsI.([]interface{})
 						for _, shellI := range shellsSlice {
 							shellStr, err := go_reflect.Reflect.ToString(shellI)
-							if err == nil && shellStr == packageData.Params[0] {
+							match, err := regexp.MatchString(shellStr, packageData.Params[0])
+							if err == nil && match == true {  // 正则校验
 								authPass = true
 								break
 							}

@@ -4,7 +4,8 @@ auth:
     - ls
     - whoami
     - pwd
-    - kubectl get pods
+    - "kubectl get *"
+    - "kubectl describe pod *"
   token2:
     - dir
   token_test:
