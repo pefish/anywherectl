@@ -1,19 +1,14 @@
 name: pefish
 auth:
   token1:
-    - ls
-    - whoami
-    - pwd
-    - "kubectl get *"
-    - "kubectl describe pod *"
-    - "kubectl logs *"
-    - top
-    - "tail *"
-  token2:
-    - dir
-  token_test:
-    - ls
-    - 88
+    shell:
+      - whoami
+      - pwd
+      - "kubectl get *"
+      - "kubectl describe pod *"
+      - "kubectl logs *"
+      - top
+      - "tail *"
 log-level: debug
 server-token: test_token
 server-address: 0.0.0.0:8181

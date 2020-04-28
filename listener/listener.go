@@ -2,7 +2,6 @@ package listener
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"github.com/pefish/go-json"
 )
 
 type Listener struct {
@@ -125,8 +125,7 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 			go l.receiveMessageLoop(ctx, conn)
 
 			// 开始注册
-
-			tokensDataBytes, err := json.Marshal(l.ClientTokens)
+			tokensDataBytes, err := go_json.Json.Marshal(l.ClientTokens)
 			if err != nil {
 				go_logger.Logger.Error("json.Marshal ClientTokens err - %s", err)
 				l.Exit()

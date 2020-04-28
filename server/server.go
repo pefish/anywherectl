@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"github.com/google/uuid"
@@ -10,6 +9,7 @@ import (
 	"github.com/pefish/anywherectl/internal/version"
 	"github.com/pefish/anywherectl/listener"
 	go_config "github.com/pefish/go-config"
+	go_json "github.com/pefish/go-json"
 	go_logger "github.com/pefish/go-logger"
 	go_reflect "github.com/pefish/go-reflect"
 	"log"
@@ -278,18 +278,27 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				authPass := false
 				if packageData.Command == "SHELL" {
 					shellsI, ok := listenerConn.listener.ClientTokens[packageData.ListenerToken]
-					if ok {
-						shellsSlice := shellsI.([]interface{})
-						for _, shellI := range shellsSlice {
-							shellStr, err := go_reflect.Reflect.ToString(shellI)
-							match, err := regexp.MatchString(shellStr, string(packageData.Params[0]))
-							if err == nil && match == true {  // 正则校验
-								authPass = true
-								break
-							}
+					if !ok {
+						goto outAuthCheck
+					}
+					tokenAuthMap, ok := shellsI.(map[string]interface{})
+					if !ok {
+						goto outAuthCheck
+					}
+					shellsSlice, ok := tokenAuthMap["shell"].([]interface{})
+					if !ok {
+						goto outAuthCheck
+					}
+					for _, shellI := range shellsSlice {
+						shellStr, err := go_reflect.Reflect.ToString(shellI)
+						match, err := regexp.MatchString(shellStr, string(packageData.Params[0]))
+						if err == nil && match == true {  // 正则校验
+							authPass = true
+							break
 						}
 					}
 				}
+			outAuthCheck:
 				if authPass == false {
 					go_logger.Logger.ErrorF("client(%s): UNAUTHORIZE.", conn.RemoteAddr())
 					sendErr := s.sendToListener(&ListenerConn{
@@ -408,8 +417,7 @@ func (s *Server) cmdRegister(conn net.Conn, packageData *protocol.ProtocolPackag
 	if listenerConn, ok := s.listeners.Load(packageData.ListenerName); ok { // 已经存在的话，就断开老的连接
 		s.destroyListenerConn(listenerConn.(*ListenerConn).conn)
 	}
-	clientTokensMap := make(map[string]interface{})
-	err := json.Unmarshal([]byte(packageData.Params[0]), &clientTokensMap)
+	clientTokensMap, err := go_json.Json.ParseBytesToMap(packageData.Params[0])
 	if err != nil {
 		return nil, fmt.Errorf("json.Unmarshal client tokens error - %s", err)
 	}
