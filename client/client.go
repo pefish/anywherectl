@@ -132,8 +132,8 @@ func (c *Client) Start(finishChan chan <- bool, flagSet *flag.FlagSet) {
 		ListenerName:  listenerName,
 		ListenerToken: listenerToken,
 		Command:       "SHELL",
-		Params:        []string{
-			data,
+		Params:        [][]byte{
+			[]byte(data),
 		},
 	})
 	if err != nil {
@@ -161,9 +161,10 @@ func (c *Client) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			}
 			go_logger.Logger.DebugF("received package '%#v'", packageData)
 			if packageData.Command == "RESULT" {
-				if packageData.Params[0] == "1" {
-					fmt.Println(packageData.Params[1])
-				} else if packageData.Params[0] == "2" {
+				resultType := string(packageData.Params[0])
+				if resultType == "1" {
+					fmt.Println(string(packageData.Params[1]))
+				} else if resultType == "2" {
 					go_logger.Logger.DebugF("[%s] command over.", packageData.Command)
 					goto exit
 				} else {

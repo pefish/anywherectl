@@ -46,7 +46,7 @@ type Server struct {
 
 func NewServer() *Server {
 	return &Server{
-		heartbeatInterval: 20 * time.Second,
+		heartbeatInterval: 10 * time.Second,
 	}
 }
 
@@ -174,7 +174,7 @@ func (s *Server) heartbeatLoop(ctx context.Context) {
 				if err != nil {
 					listenerConn.pingErrCount++
 					go_logger.Logger.WarnF("LISTENER(%s): ping error, count: %d. - %s", listenerConn.listener.Name, listenerConn.pingErrCount, err)
-					if listenerConn.pingErrCount > 10 {
+					if listenerConn.pingErrCount > 3 {
 						go_logger.Logger.WarnF("LISTENER(%s): ping error too many, close this connection.", listenerConn.listener.Name)
 						s.destroyListenerConn(listenerConn.conn)
 						return false
@@ -282,7 +282,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 						shellsSlice := shellsI.([]interface{})
 						for _, shellI := range shellsSlice {
 							shellStr, err := go_reflect.Reflect.ToString(shellI)
-							match, err := regexp.MatchString(shellStr, packageData.Params[0])
+							match, err := regexp.MatchString(shellStr, string(packageData.Params[0]))
 							if err == nil && match == true {  // 正则校验
 								authPass = true
 								break
@@ -303,7 +303,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 
 				uuidStr := uuid.New().String()
 				s.clientConnCache.Store(uuidStr, conn)
-				err = s.sendToListener(listenerConn, packageData.Command, append([]string{uuidStr}, packageData.Params...))
+				err = s.sendToListener(listenerConn, packageData.Command, append([][]byte{[]byte(uuidStr)}, packageData.Params...))
 				if err != nil {
 					go_logger.Logger.ErrorF("client(%s): send command to listener - %s", conn.RemoteAddr(), packageData.Command, err)
 				}
@@ -322,7 +322,9 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 						tempListenerConn := &ListenerConn{
 							conn: conn,
 						}
-						sendErr := s.sendToListener(tempListenerConn, "REGISTER_FAIL", []string{err.Error()})
+						sendErr := s.sendToListener(tempListenerConn, "REGISTER_FAIL", [][]byte{
+							[]byte(err.Error()),
+						})
 						if sendErr != nil {
 							go_logger.Logger.WarnF("failed to exec REGISTER_FAIL command - %s", err)
 						}
@@ -356,10 +358,11 @@ func (s *Server) execCommand(listenerConn *ListenerConn, packageData *protocol.P
 		listenerName := listenerNameInterface.(string)
 		go_logger.Logger.DebugF("LISTENER(%s): received PONG.", listenerName)
 	} else if packageData.Command == "SHELL_RESULT" {
-		connI, ok := s.clientConnCache.Load(packageData.Params[0])
+		clientId := string(packageData.Params[0])
+		connI, ok := s.clientConnCache.Load(clientId)
 		if !ok {
-			go_logger.Logger.WarnF("client not found when send shell result to client, clientId: %s", packageData.Params[0])
-			s.sendToListener(listenerConn, "CLIENT_CLOSED", []string{packageData.Params[0]})
+			go_logger.Logger.WarnF("client not found when send shell result to client, clientId: %s", clientId)
+			s.sendToListener(listenerConn, "CLIENT_CLOSED", [][]byte{packageData.Params[0]})
 			return
 		}
 		clientConn := connI.(net.Conn)
@@ -372,10 +375,10 @@ func (s *Server) execCommand(listenerConn *ListenerConn, packageData *protocol.P
 			Params:        packageData.Params[1:],
 		})
 		if err != nil {
-			go_logger.Logger.WarnF("write to conn when send shell result to client, clientId: %s", packageData.Params[0])
+			go_logger.Logger.WarnF("write to conn error when send shell result to client, clientId: %s - %s", clientId, err)
 			go_logger.Logger.Warn("close client conn")
+			s.clientConnCache.Delete(clientId)
 			time.Sleep(2 * time.Second)
-			s.clientConnCache.Delete(packageData.Params[0])
 			clientConn.Close()
 			return
 		}
@@ -424,7 +427,7 @@ func (s *Server) cmdRegister(conn net.Conn, packageData *protocol.ProtocolPackag
 	return listenerConn, nil
 }
 
-func (s *Server) sendToListener(listenerConn *ListenerConn, command string, params []string) error {
+func (s *Server) sendToListener(listenerConn *ListenerConn, command string, params [][]byte) error {
 	listenerConn.sendCommandLock.Lock()
 	defer listenerConn.sendCommandLock.Unlock()
 

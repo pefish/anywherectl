@@ -1,7 +1,6 @@
 package listener
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -127,14 +126,14 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 
 			// 开始注册
 
-			tokensDataStr, err := json.Marshal(l.ClientTokens)
+			tokensDataBytes, err := json.Marshal(l.ClientTokens)
 			if err != nil {
 				go_logger.Logger.Error("json.Marshal ClientTokens err - %s", err)
 				l.Exit()
 				break
 			}
-			err = l.sendCommandToServer("REGISTER", []string{
-				string(tokensDataStr),
+			err = l.sendCommandToServer("REGISTER", [][]byte{
+				tokensDataBytes,
 			})
 			if err != nil {
 				go_logger.Logger.Error("send command REGISTER err - %s", err)
@@ -211,7 +210,7 @@ exitMessageLoop:
 }
 
 // if return error, conn between listener and server will be closed.
-func (l *Listener) execCommand(conn net.Conn, name string, params []string) error {
+func (l *Listener) execCommand(conn net.Conn, name string, params [][]byte) error {
 	if name == "PING" {
 		err := l.sendCommandToServer("PONG", nil)
 		if err != nil {
@@ -226,22 +225,29 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 	} else if name == "VERSION_ERROR" {
 		return errors.New("version error")
 	} else if name == "CLIENT_CLOSED" {
-		clientId := params[0]
+		clientId := string(params[0])
 		re, ok := l.clientActions.Load(clientId)
-		if ok {
-			actionData := re.(*ActionData)
-			close(actionData.exitActionChan)
-			l.clientActions.Delete(clientId)
+		if !ok {
+			go_logger.Logger.DebugF("client not found. clientId: %s", clientId)
+			return nil
+		}
+		go_logger.Logger.DebugF("client closed, exit action goroutine. clientId: %s", clientId)
+		actionData := re.(*ActionData)
+		l.clientActions.Delete(clientId)
+		select {
+		case actionData.exitActionChan <- true:
+		default:
+			return nil
 		}
 	} else if name == "SHELL" {
-		clientId := params[0]
+		clientId := string(params[0])
 		go_logger.Logger.InfoF("exec shell command [%s]", params[1])
-		cmd, err := shell.GetCmd(params[1])
+		cmd, err := shell.GetCmd(string(params[1]))
 		if err != nil {
 			go_logger.Logger.WarnF("failed to get cmd instance - %s", err)
 			return nil
 		}
-		reader_, err := cmd.StdoutPipe()
+		reader, err := cmd.StdoutPipe()
 		if err != nil {
 			go_logger.Logger.WarnF("failed to StdoutPipe - %s", err)
 			return nil
@@ -255,7 +261,6 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 			exitActionChan: make(chan bool, 1),
 		}
 		l.clientActions.Store(clientId, actionData)
-		reader := bufio.NewReader(reader_)
 
 		// 启动定时器监控ReadLine情况，30s没数据强制关闭进程
 		timer := time.NewTimer(0)
@@ -267,23 +272,34 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 					cmd.Process.Kill()
 				}
 				timer.Stop()
-				break
+				go_logger.Logger.Warn("action timer stopped")
+				return
 			}
 		}()
 		for {
-			timer.Reset(30 * time.Second)
+			select {
+			case <- actionData.exitActionChan:
+				return nil
+			default:
+				timer.Reset(20 * time.Second)
 
-			line, _, err := reader.ReadLine()
-			if err != nil {
-				if err == io.EOF {
-					go_logger.Logger.DebugF("end to ReadLine - %s", err)
-					l.sendCommandToServer("SHELL_RESULT", []string{params[0], "2", string(line)})
+				readBytes := make([]byte, 1024000)  // 一次读1kb数据
+				n, err := reader.Read(readBytes)
+				if err != nil {
+					if err == io.EOF {
+						go_logger.Logger.DebugF("end to ReadLine - %s", err)
+						l.sendCommandToServer("SHELL_RESULT", [][]byte{params[0], []byte("2")})
+						return nil
+					}
+					go_logger.Logger.WarnF("error to ReadLine - %s", err)
 					return nil
 				}
-				go_logger.Logger.WarnF("error to ReadLine - %s", err)
-				return nil
+				err = l.sendCommandToServer("SHELL_RESULT", [][]byte{params[0], []byte("1"), readBytes[:n]})
+				if err != nil {  // 可能server的连接断开了
+					go_logger.Logger.WarnF("error to sendCommandToServer error - %s", err)
+					return nil
+				}
 			}
-			l.sendCommandToServer("SHELL_RESULT", []string{params[0], "1", string(line)})
 		}
 	} else {
 		return errors.New("command error")
@@ -291,7 +307,7 @@ func (l *Listener) execCommand(conn net.Conn, name string, params []string) erro
 	return nil
 }
 
-func (l *Listener) sendCommandToServer(command string, params []string) error {
+func (l *Listener) sendCommandToServer(command string, params [][]byte) error {
 	l.sendCommandLock.Lock()
 	defer l.sendCommandLock.Unlock()
 

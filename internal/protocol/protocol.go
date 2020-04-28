@@ -16,7 +16,7 @@ type ProtocolPackage struct {
 	ListenerName  string
 	ListenerToken string
 	Command       string
-	Params        []string
+	Params        [][]byte
 }
 
 func WritePackage(conn net.Conn, p *ProtocolPackage) (int, error) {
@@ -70,19 +70,19 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) (int, error) {
 	packageBuf.Write(commandBuf)
 
 	var paramsSize uint32
-	var paramsStr string
+	var paramsBytes []byte
 	if p.Params == nil {
 		paramsSize = 0
 	} else {
-		paramsStr = strings.Join(p.Params, "||")
-		paramsSize = uint32(len(paramsStr))
+		paramsBytes = bytes.Join(p.Params, []byte("||"))
+		paramsSize = uint32(len(paramsBytes))
 	}
 	paramsSizeBuf := make([]byte, 4)
 	binary.BigEndian.PutUint32(paramsSizeBuf, paramsSize)
 	packageBuf.Write(paramsSizeBuf)
 
 	if p.Params != nil {
-		packageBuf.Write([]byte(paramsStr))
+		packageBuf.Write(paramsBytes)
 	}
 
 	//fmt.Println(packageBuf.Bytes())
@@ -111,14 +111,14 @@ func ReadPackage(conn net.Conn) (*ProtocolPackage, error) {
 		return nil, fmt.Errorf("(ReadPackage) failed to read param message length - %s", err)
 	}
 
-	params := make([]string, 0)
+	params := make([][]byte, 0)
 	if paramsStrSize != 0 {
 		paramsBuf := make([]byte, paramsStrSize) // 读出所有参数
 		_, err = io.ReadFull(conn, paramsBuf)
 		if err != nil {
 			return nil, fmt.Errorf("(ReadPackage) failed to read param message - %s", err)
 		}
-		params = strings.Split(string(paramsBuf), "||")
+		params = bytes.Split(paramsBuf, []byte("||"))
 	}
 	return &ProtocolPackage{
 		Version:       version,
