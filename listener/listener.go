@@ -166,13 +166,12 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 }
 
 func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
-	var zeroTime time.Time
-	err := conn.SetDeadline(zeroTime)
-	if err != nil {
-		go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
-	}
 	isExitLoop := make(chan bool, 1)
 	for {
+		err := conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		if err != nil {
+			go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
+		}
 		select {
 		case <-ctx.Done():
 			goto exit

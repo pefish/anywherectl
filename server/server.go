@@ -152,7 +152,7 @@ func (s *Server) acceptConnLoop(ctx context.Context) {
 			}
 
 			s.wg.Add(1)
-			go_logger.Logger.InfoF("TCP: new client(%s)", clientConn.RemoteAddr())
+			go_logger.Logger.InfoF("TCP: new CONN(%s)", clientConn.RemoteAddr())
 			go s.receiveMessageLoop(ctx, clientConn)
 		}
 
@@ -214,12 +214,11 @@ func (s *Server) Clear() {
 }
 
 func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
-	var zeroTime time.Time
-	err := conn.SetDeadline(zeroTime) // 设置tcp连接的读写截止时间。到了截止时间连接会被关闭
-	if err != nil {
-		go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
-	}
 	for {
+		err := conn.SetReadDeadline(time.Now().Add(s.heartbeatInterval * 2)) // 这么久没收到数据，则报超时错
+		if err != nil {
+			go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
+		}
 		select {
 		case <-ctx.Done():
 			goto exitMessageLoop
@@ -227,12 +226,14 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			packageData, err := protocol.ReadPackage(conn)
 			if err != nil {
 				if strings.HasSuffix(err.Error(), "use of closed network connection") {
+					go_logger.Logger.WarnF("CONN(%s): read package error - '%s'", conn.RemoteAddr(), err)
 					goto exitMessageLoop
 				}
 				if strings.HasSuffix(err.Error(), "EOF") {
+					go_logger.Logger.WarnF("CONN(%s): read package error - '%s'", conn.RemoteAddr(), err)
 					goto exitMessageLoop
 				}
-				go_logger.Logger.ErrorF("CONN(%s): read command and params error - '%s'", conn.RemoteAddr(), err)
+				go_logger.Logger.ErrorF("CONN(%s): read package error - '%s'", conn.RemoteAddr(), err)
 				goto exitMessageLoop
 			}
 			go_logger.Logger.DebugF("CONN(%s): received package '%#v'", conn.RemoteAddr(), packageData)
@@ -260,11 +261,11 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				goto exitMessageLoop
 			}
 			if packageData.ServerToken == s.clientToken { // client连接
-				go_logger.Logger.InfoF("client(%s) connected.", conn.RemoteAddr())
+				go_logger.Logger.InfoF("CONN(%s) connected.", conn.RemoteAddr())
 				// 加上client id转发
 				listenerConnI, ok := s.listeners.Load(packageData.ListenerName)
 				if !ok {
-					go_logger.Logger.ErrorF("client(%s): listener not found", conn.RemoteAddr())
+					go_logger.Logger.ErrorF("CONN(%s): listener not found", conn.RemoteAddr())
 					sendErr := s.sendToListener(&ListenerConn{
 						conn: conn,
 					}, "LISTENER_NOT_FOUND", nil)
@@ -300,7 +301,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				}
 			outAuthCheck:
 				if authPass == false {
-					go_logger.Logger.ErrorF("client(%s): UNAUTHORIZE.", conn.RemoteAddr())
+					go_logger.Logger.ErrorF("CONN(%s): UNAUTHORIZE.", conn.RemoteAddr())
 					sendErr := s.sendToListener(&ListenerConn{
 						conn: conn,
 					}, "UNAUTHORIZE", nil)
@@ -314,7 +315,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				s.clientConnCache.Store(uuidStr, conn)
 				err = s.sendToListener(listenerConn, packageData.Command, append([][]byte{[]byte(uuidStr)}, packageData.Params...))
 				if err != nil {
-					go_logger.Logger.ErrorF("client(%s): send command to listener - %s", conn.RemoteAddr(), packageData.Command, err)
+					go_logger.Logger.ErrorF("CONN(%s): send command to listener - %s", conn.RemoteAddr(), packageData.Command, err)
 				}
 				break
 			} else {
@@ -357,7 +358,9 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 		}
 	}
 exitMessageLoop:
-	time.Sleep(2 * time.Second) // 延迟，等待listner处理消息完成，避免立马断开导致listener不必要的重连,由listener关闭连接
+	time.Sleep(2 * time.Second) // 延迟，等待listner处理消息完成，避免立马断开导致listener不必要的重连
+	conn.Close()
+	go_logger.Logger.InfoF("CONN(%s) closed.", conn.RemoteAddr())
 	s.wg.Done()
 }
 
