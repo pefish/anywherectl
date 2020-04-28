@@ -12,6 +12,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 )
 
@@ -28,6 +29,12 @@ func main() {
 
 	flagSet := flag.NewFlagSet(version.AppName, flag.ExitOnError)
 
+	flagSet.Usage = func() {
+		fmt.Fprintf(flagSet.Output(), "\n%s%s is a tool to remote control anything. Enjoy it !!!\n\n", strings.ToUpper(string(flagSet.Name()[0])), flagSet.Name()[1:])
+		fmt.Fprintf(flagSet.Output(), "Usage of %s:\n", flagSet.Name())
+		flagSet.PrintDefaults()
+		fmt.Fprintf(flagSet.Output(), "\n")
+	}
 	flagSet.Bool("version", false, "print version string")
 	flagSet.String("log-level", "warn", "set log verbosity: debug, info, warn, or error")
 	flagSet.String("config", "", "path to config file")
