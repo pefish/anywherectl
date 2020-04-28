@@ -27,7 +27,6 @@ type Listener struct {
 	serverToken     string
 	serverAddress   string
 	sendCommandLock sync.Mutex
-	serverConn      net.Conn
 	connExit        chan bool
 	cancelFunc      context.CancelFunc
 	finishChan      chan<- bool
@@ -119,7 +118,6 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 		for {
 			conn := <-connChan
 			go_logger.Logger.InfoF("server '%s' connected!! start register...", conn.RemoteAddr())
-			l.serverConn = conn
 
 			// 开始接收消息
 			go l.receiveMessageLoop(ctx, conn)
@@ -131,7 +129,7 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 				l.Exit()
 				break
 			}
-			err = l.sendCommandToServer("REGISTER", [][]byte{
+			err = l.sendCommandToServer(conn, "REGISTER", [][]byte{
 				tokensDataBytes,
 			})
 			if err != nil {
@@ -166,7 +164,6 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 }
 
 func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
-	isExitLoop := make(chan bool, 1)
 	for {
 		err := conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		if err != nil {
@@ -174,8 +171,6 @@ func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 		}
 		select {
 		case <-ctx.Done():
-			goto exit
-		case <- isExitLoop:
 			goto exit
 		default:
 			packageData, err := protocol.ReadPackage(conn)
@@ -190,13 +185,11 @@ func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			}
 			go_logger.Logger.DebugF("received package '%#v'", packageData)
 
-			go func() {
-				err = l.execCommand(conn, packageData.Command, packageData.Params)
-				if err != nil {
-					go_logger.Logger.ErrorF("exec [%s] command err - %s", packageData.Command, err)
-					close(isExitLoop)
-				}
-			}()
+			err = l.execCommand(conn, packageData.Command, packageData.Params)
+			if err != nil {
+				go_logger.Logger.ErrorF("exec [%s] command err - %s", packageData.Command, err)
+				goto exit
+			}
 		}
 
 	}
@@ -210,7 +203,7 @@ exitMessageLoop:
 // if return error, conn between listener and server will be closed.
 func (l *Listener) execCommand(conn net.Conn, name string, params [][]byte) error {
 	if name == "PING" {
-		err := l.sendCommandToServer("PONG", nil)
+		err := l.sendCommandToServer(conn, "PONG", nil)
 		if err != nil {
 			go_logger.Logger.WarnF("failed to exec pong command - %s", err)
 		}
@@ -274,42 +267,46 @@ func (l *Listener) execCommand(conn net.Conn, name string, params [][]byte) erro
 				return
 			}
 		}()
-		for {
-			select {
-			case <- actionData.exitActionChan:
-				return nil
-			default:
-				timer.Reset(20 * time.Second)
+		go func() {
+			for {
+				select {
+				case <- actionData.exitActionChan:
+					goto exitCommand
+				default:
+					timer.Reset(20 * time.Second)
 
-				readBytes := make([]byte, 1024000)  // 一次读1kb数据
-				n, err := reader.Read(readBytes)
-				if err != nil {
-					if err == io.EOF {
-						go_logger.Logger.DebugF("end to ReadLine - %s", err)
-						l.sendCommandToServer("SHELL_RESULT", [][]byte{params[0], []byte("2")})
-						return nil
+					readBytes := make([]byte, 1024000)  // 一次读1kb数据
+					n, err := reader.Read(readBytes)
+					if err != nil {
+						if err == io.EOF {
+							go_logger.Logger.DebugF("end to ReadLine - %s", err)
+							l.sendCommandToServer(conn, "SHELL_RESULT", [][]byte{params[0], []byte("2")})
+							goto exitCommand
+						}
+						go_logger.Logger.WarnF("error to ReadLine - %s", err)
+						goto exitCommand
 					}
-					go_logger.Logger.WarnF("error to ReadLine - %s", err)
-					return nil
-				}
-				err = l.sendCommandToServer("SHELL_RESULT", [][]byte{params[0], []byte("1"), readBytes[:n]})
-				if err != nil {  // 可能server的连接断开了
-					go_logger.Logger.WarnF("error to sendCommandToServer error - %s", err)
-					return nil
+					err = l.sendCommandToServer(conn, "SHELL_RESULT", [][]byte{params[0], []byte("1"), readBytes[:n]})
+					if err != nil {  // 可能server的连接断开了
+						go_logger.Logger.WarnF("error to sendCommandToServer error - %s", err)
+						goto exitCommand
+					}
 				}
 			}
-		}
+		exitCommand:
+			return
+		}()
 	} else {
 		return errors.New("command error")
 	}
 	return nil
 }
 
-func (l *Listener) sendCommandToServer(command string, params [][]byte) error {
+func (l *Listener) sendCommandToServer(conn net.Conn, command string, params [][]byte) error {
 	l.sendCommandLock.Lock()
 	defer l.sendCommandLock.Unlock()
 
-	_, err := protocol.WritePackage(l.serverConn, &protocol.ProtocolPackage{
+	_, err := protocol.WritePackage(conn, &protocol.ProtocolPackage{
 		Version:       version.ProtocolVersion,
 		ServerToken:   l.serverToken,
 		ListenerName:  l.name,

@@ -85,7 +85,6 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) (int, error) {
 		packageBuf.Write(paramsBytes)
 	}
 
-	//fmt.Println(packageBuf.Bytes())
 	i, err := conn.Write(packageBuf.Bytes())
 	if err != nil {
 		return 0, fmt.Errorf("(WritePackage) write to conn err - %s", err)

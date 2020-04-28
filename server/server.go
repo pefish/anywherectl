@@ -215,10 +215,6 @@ func (s *Server) Clear() {
 
 func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 	for {
-		err := conn.SetReadDeadline(time.Now().Add(s.heartbeatInterval * 2)) // 这么久没收到数据，则报超时错
-		if err != nil {
-			go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
-		}
 		select {
 		case <-ctx.Done():
 			goto exitMessageLoop
@@ -261,6 +257,12 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				goto exitMessageLoop
 			}
 			if packageData.ServerToken == s.clientToken { // client连接
+				var zeroTime time.Time
+				err := conn.SetReadDeadline(zeroTime) // client保持alive，因为没有心跳
+				if err != nil {
+					go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
+				}
+
 				go_logger.Logger.InfoF("CONN(%s) connected.", conn.RemoteAddr())
 				// 加上client id转发
 				listenerConnI, ok := s.listeners.Load(packageData.ListenerName)
@@ -319,6 +321,11 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				}
 				break
 			} else {
+				err := conn.SetReadDeadline(time.Now().Add(s.heartbeatInterval * 2)) // 这么久没收到数据，则报超时错
+				if err != nil {
+					go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
+				}
+
 				// 处理listener命令
 				listenerNameInterface, ok := s.connIdListenerNameMap.Load(conn.RemoteAddr().String())
 				if !ok {  // 新连接
@@ -352,8 +359,8 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 					go_logger.Logger.ErrorF("CONN(%s): listener not found", conn.RemoteAddr())
 					goto exitMessageLoop
 				}
-				// 执行命令
-				go s.execCommand(val.(*ListenerConn), packageData) // execCommand出错就关闭连接
+				// 执行命令，不能使用协程，否则会造成顺序错乱
+				s.execCommand(val.(*ListenerConn), packageData) // execCommand出错就关闭连接
 			}
 		}
 	}
