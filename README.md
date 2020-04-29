@@ -41,6 +41,7 @@ anywherectl --listener-name=pefish --listener-token=token_test --server-token=te
 - [x] Chunk transmission (数据量大是需要分chunk传输，才能继续保证tcp连接复用)
 - [ ] Download file
 - [ ] Upload file
+- [ ] Persistent session (可以跟ssh一样持续操作)
 
 ## Building the source
 
