@@ -171,6 +171,9 @@ func (c *Client) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 					go_logger.Logger.DebugF("[%s] command error.", packageData.Command)
 					goto exit
 				}
+			} else if packageData.Command == "ERROR" {
+				fmt.Println(string(packageData.Params[0]))
+				goto exit
 			} else {
 				go_logger.Logger.ErrorF("received [%s] command, it is illegal.", packageData.Command)
 				goto exit

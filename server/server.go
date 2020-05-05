@@ -126,7 +126,7 @@ func (s *Server) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 		s.pprofHttpServer = &http.Server{Addr: pprofAddress}
 		s.wg.Add(1)
 		go func() {
-			go_logger.Logger.InfoF("starting pprof server on %s", pprofAddress)
+			go_logger.Logger.InfoF("started pprof server on %s, you can open url [http://%s/debug/pprof/] to enjoy!!", s.pprofHttpServer.Addr, s.pprofHttpServer.Addr)
 			err := s.pprofHttpServer.ListenAndServe()
 			if err != nil {
 				go_logger.Logger.WarnF("pprof server start error - %s", err)
@@ -169,13 +169,13 @@ func (s *Server) heartbeatLoop(ctx context.Context) {
 		case <-timer.C:
 			s.listeners.Range(func(key, value interface{}) bool {
 				listenerConn := value.(*ListenerConn)
-				go_logger.Logger.DebugF("Heartbeat: %s", listenerConn.listener.Name)
+				go_logger.Logger.DebugF("Heartbeat: %s", listenerConn.listener.GetName())
 				err := s.sendToListener(listenerConn, "PING", nil)
 				if err != nil {
 					listenerConn.pingErrCount++
-					go_logger.Logger.WarnF("LISTENER(%s): ping error, count: %d. - %s", listenerConn.listener.Name, listenerConn.pingErrCount, err)
+					go_logger.Logger.WarnF("LISTENER(%s): ping error, count: %d. - %s", listenerConn.listener.GetName(), listenerConn.pingErrCount, err)
 					if listenerConn.pingErrCount > 3 {
-						go_logger.Logger.WarnF("LISTENER(%s): ping error too many, close this connection.", listenerConn.listener.Name)
+						go_logger.Logger.WarnF("LISTENER(%s): ping error too many, close this connection.", listenerConn.listener.GetName())
 						s.destroyListenerConn(listenerConn.conn)
 						return false
 					}
@@ -331,6 +331,15 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				if !ok {  // 新连接
 					if packageData.Command != "REGISTER" {
 						go_logger.Logger.ErrorF("CONN(%s): must register first", conn.RemoteAddr())
+						tempListenerConn := &ListenerConn{
+							conn: conn,
+						}
+						sendErr := s.sendToListener(tempListenerConn, "ERROR", [][]byte{
+							[]byte("must register first"),
+						})
+						if sendErr != nil {
+							go_logger.Logger.WarnF("failed to exec REGISTER_FAIL command - %s", err)
+						}
 						goto exitMessageLoop
 					}
 					// 开始注册逻辑

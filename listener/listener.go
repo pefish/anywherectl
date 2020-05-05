@@ -23,14 +23,12 @@ import (
 )
 
 type Listener struct {
-	Name            string
 	serverToken     string
 	serverAddress   string
 	sendCommandLock sync.Mutex
-	connExit        chan bool
 	cancelFunc      context.CancelFunc
 	finishChan      chan<- bool
-	name            string
+	Name            string
 	isReconnectChan chan<- bool
 	ClientTokens    map[string]interface{}
 	clientActions   sync.Map // 保存client的所有action。map[string]ActionData
@@ -40,14 +38,11 @@ type ActionData struct {
 	exitActionChan chan bool
 }
 
-func NewListener(name string) *Listener {
-	return &Listener{
-		Name:     name,
-		connExit: make(chan bool, 1),
-	}
+func NewListener() *Listener {
+	return &Listener{}
 }
 
-func (s *Listener) DecorateFlagSet(flagSet *flag.FlagSet) {
+func (l *Listener) DecorateFlagSet(flagSet *flag.FlagSet) {
 	flagSet.String("name", "pefish", "listener name")
 	flagSet.String("server-token", "", "server token to connect. max length 32")
 	flagSet.String("server-address", "0.0.0.0:8181", "server address to connect")
@@ -55,11 +50,15 @@ func (s *Listener) DecorateFlagSet(flagSet *flag.FlagSet) {
 	flagSet.String("pprof-address", "0.0.0.0:9191", "<addr>:<port> to listen on for pprof")
 }
 
-func (s *Listener) ParseFlagSet(flagSet *flag.FlagSet) {
+func (l *Listener) ParseFlagSet(flagSet *flag.FlagSet) {
 	err := flagSet.Parse(os.Args[2:])
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (l *Listener) GetName() string {
+	return l.Name
 }
 
 func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
@@ -95,7 +94,7 @@ func (l *Listener) Start(finishChan chan<- bool, flagSet *flag.FlagSet) {
 	}
 	l.serverAddress = serverAddress
 
-	l.name, err = go_config.Config.GetString("name")
+	l.Name, err = go_config.Config.GetString("name")
 	if err != nil {
 		go_logger.Logger.ErrorF("get config error - %s", err)
 		l.Exit()
@@ -296,6 +295,8 @@ func (l *Listener) execCommand(conn net.Conn, name string, params [][]byte) erro
 		exitCommand:
 			return
 		}()
+	} else if name == "ERROR" {
+		return errors.New(string(params[0]))
 	} else {
 		return errors.New("command error")
 	}
@@ -309,7 +310,7 @@ func (l *Listener) sendCommandToServer(conn net.Conn, command string, params [][
 	_, err := protocol.WritePackage(conn, &protocol.ProtocolPackage{
 		Version:       version.ProtocolVersion,
 		ServerToken:   l.serverToken,
-		ListenerName:  l.name,
+		ListenerName:  l.Name,
 		ListenerToken: "",
 		Command:       command,
 		Params:        params,

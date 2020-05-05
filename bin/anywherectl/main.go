@@ -22,7 +22,7 @@ func main() {
 	if secondArg == "serve" {
 		subServer = server.NewServer()
 	} else if secondArg == "listen" {
-		subServer = listener.NewListener(`test`)
+		subServer = listener.NewListener()
 	} else {
 		subServer = client.NewClient()
 	}
