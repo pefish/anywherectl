@@ -15,6 +15,7 @@ import (
 var buildPath = "./build/"
 var targetPath = buildPath + "bin/"
 var packPath = buildPath + "pack/"
+var sourcePath = "./"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -25,6 +26,9 @@ func main() {
 		log.Fatal(err)
 	}
 	subCmd := os.Args[1]
+	if len(os.Args) > 2 {
+		sourcePath = os.Args[2]
+	}
 	if subCmd == "build-cur" {
 		mustBuild(runtime.GOOS)
 	} else if subCmd == "build-cur-pack" {
@@ -51,7 +55,7 @@ func mustBuild(goos string) {
 		log.Fatal(err)
 	}
 
-	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", outputPath, "-v", "./bin/...")
+	cmd := exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", outputPath, "-v", sourcePath + "bin/...")
 	goBin, _ := filepath.Abs(targetPath)
 	cmd.Env = append(cmd.Env, "GOBIN="+goBin)
 	cmd.Env = append(cmd.Env, "GOOS="+goos)

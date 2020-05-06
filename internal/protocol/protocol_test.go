@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"github.com/pefish/anywherectl/internal/test"
 	"testing"
+	test_assert "github.com/pefish/go-test-assert"
 )
 
 func TestWritePackage(t *testing.T) {
@@ -22,9 +23,9 @@ func TestWritePackage(t *testing.T) {
 		Command:       "PONG",
 		Params:        nil,
 	})
-	test.Equal(t, 136, len(packageBuf.Bytes()))
-	test.Equal(t, "76302e31746573745f746f6b656e2020202020202020202020202020202020202020202068616861202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020504f4e472020202020202020202020202020202020202020202020202020202000000000", hex.EncodeToString(packageBuf.Bytes()))
-	test.Equal(t, 136, i)
+	test_assert.Equal(t, 136, len(packageBuf.Bytes()))
+	test_assert.Equal(t, "76302e31746573745f746f6b656e2020202020202020202020202020202020202020202068616861202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020202020504f4e472020202020202020202020202020202020202020202020202020202000000000", hex.EncodeToString(packageBuf.Bytes()))
+	test_assert.Equal(t, 136, i)
 }
 
 func TestReadPackage(t *testing.T) {
@@ -35,10 +36,10 @@ func TestReadPackage(t *testing.T) {
 		return reader.Read(bytes)
 	}
 	p, _ := ReadPackage(conn)
-	test.Equal(t, "v0.1", p.Version)
-	test.Equal(t, "test_token", p.ServerToken)
-	test.Equal(t, "haha", p.ListenerName)
-	test.Equal(t, "", p.ListenerToken)
-	test.Equal(t, "PONG", p.Command)
-	test.Equal(t, 0, len(p.Params))
+	test_assert.Equal(t, "v0.1", p.Version)
+	test_assert.Equal(t, "test_token", p.ServerToken)
+	test_assert.Equal(t, "haha", p.ListenerName)
+	test_assert.Equal(t, "", p.ListenerToken)
+	test_assert.Equal(t, "PONG", p.Command)
+	test_assert.Equal(t, 0, len(p.Params))
 }
