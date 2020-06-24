@@ -152,7 +152,7 @@ func (s *Server) acceptConnLoop(ctx context.Context) {
 			}
 
 			s.wg.Add(1)
-			go_logger.Logger.InfoF("TCP: new CONN(%s)", clientConn.RemoteAddr())
+			go_logger.Logger.DebugF("TCP: new CONN(%s)", clientConn.RemoteAddr())
 			go s.receiveMessageLoop(ctx, clientConn)
 		}
 
@@ -164,6 +164,7 @@ exit:
 
 func (s *Server) heartbeatLoop(ctx context.Context) {
 	timer := time.NewTimer(s.heartbeatInterval)
+	defer timer.Stop()
 	for {
 		select {
 		case <-timer.C:
@@ -190,7 +191,6 @@ func (s *Server) heartbeatLoop(ctx context.Context) {
 		}
 	}
 exitHeartbeatLoop:
-	timer.Stop()
 	go_logger.Logger.Info("SHUTDOWN: heartbeat.")
 	s.wg.Done()
 }
@@ -293,7 +293,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 						goto outAuthCheck
 					}
 					for _, shellI := range shellsSlice {
-						shellStr, err := go_reflect.Reflect.ToString(shellI)
+						shellStr := go_reflect.Reflect.ToString(shellI)
 						match, err := regexp.MatchString(shellStr, string(packageData.Params[0]))
 						if err == nil && match == true {  // 正则校验
 							authPass = true
@@ -374,9 +374,8 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 		}
 	}
 exitMessageLoop:
-	time.Sleep(2 * time.Second) // 延迟，等待listner处理消息完成，避免立马断开导致listener不必要的重连
 	conn.Close()
-	go_logger.Logger.InfoF("CONN(%s) closed.", conn.RemoteAddr())
+	go_logger.Logger.DebugF("CONN(%s) closed.", conn.RemoteAddr())
 	s.wg.Done()
 }
 
@@ -406,7 +405,7 @@ func (s *Server) execCommand(listenerConn *ListenerConn, packageData *protocol.P
 			go_logger.Logger.WarnF("write to conn error when send shell result to client, clientId: %s - %s", clientId, err)
 			go_logger.Logger.Warn("close client conn")
 			s.clientConnCache.Delete(clientId)
-			time.Sleep(2 * time.Second)
+			time.Sleep(time.Second)
 			clientConn.Close()
 			return
 		}

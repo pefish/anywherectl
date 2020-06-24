@@ -177,10 +177,10 @@ func (l *Listener) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 				go_logger.Logger.DebugF("read command and params error - '%s'", err)
 				if strings.Contains(err.Error(), "EOF") {
 					go_logger.Logger.Error("connection disconnected!! start reconnecting...")
-					l.isReconnectChan <- true
-					goto exitMessageLoop
 				}
-				goto exit
+				// 只要出错就重连
+				l.isReconnectChan <- true
+				goto exitMessageLoop
 			}
 			go_logger.Logger.DebugF("received package '%#v'", packageData)
 

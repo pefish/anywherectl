@@ -6,4 +6,4 @@ RUN GOMAXPROCS=4 go test -timeout 90s -race ./...
 RUN make
 CMD ["./build/bin/linux/anywherectl", "--help"]
 
-# docker build -t pefish/anywherectl:v1.1 .
+# docker build -t pefish/anywherectl:v1.2.4 .
