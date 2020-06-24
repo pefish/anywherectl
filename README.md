@@ -4,6 +4,12 @@
 
 Anywherectl is a tool to remote control anything. Enjoy it !!!
 
+## Install
+
+```shell script
+go get -u github.com/pefish/anywherectl/...
+```
+
 ## Quick start
 
 ### Start Server
