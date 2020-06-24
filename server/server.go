@@ -153,6 +153,10 @@ func (s *Server) acceptConnLoop(ctx context.Context) {
 
 			s.wg.Add(1)
 			go_logger.Logger.DebugF("TCP: new CONN(%s)", clientConn.RemoteAddr())
+			err = clientConn.SetReadDeadline(time.Now().Add(s.heartbeatInterval * 2)) // 这么久没收到数据，则报超时错
+			if err != nil {
+				go_logger.Logger.WarnF("failed to set conn timeout - %s", err)
+			}
 			go s.receiveMessageLoop(ctx, clientConn)
 		}
 
@@ -220,6 +224,7 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			goto exitMessageLoop
 		default:
 			packageData, err := protocol.ReadPackage(conn)
+			fmt.Println(packageData, err)
 			if err != nil {
 				if strings.HasSuffix(err.Error(), "use of closed network connection") {
 					go_logger.Logger.WarnF("CONN(%s): read package error - '%s'", conn.RemoteAddr(), err)

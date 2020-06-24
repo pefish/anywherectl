@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	go_logger "github.com/pefish/go-logger"
 	"io"
 	"net"
 	"strings"
@@ -95,20 +96,27 @@ func WritePackage(conn net.Conn, p *ProtocolPackage) (int, error) {
 
 func ReadPackage(conn net.Conn) (*ProtocolPackage, error) {
 	headerBuf := make([]byte, 136)
-	_, err := io.ReadFull(conn, headerBuf)
+	_, err := io.ReadFull(conn, headerBuf)  // 接受了足够136个字节，这里才会从阻塞中恢复
 	if err != nil {
 		return nil, fmt.Errorf("(ReadPackage) failed to read command - %s", err)
 	}
+	go_logger.Logger.DebugF("headerBuf: %v", headerBuf)
 	version := strings.TrimSpace(string(headerBuf[:4]))
+	go_logger.Logger.DebugF("version: %s", version)
 	serverToken := strings.TrimSpace(string(headerBuf[4:36]))
+	go_logger.Logger.DebugF("serverToken: %s", serverToken)
 	listenerName := strings.TrimSpace(string(headerBuf[36:68]))
+	go_logger.Logger.DebugF("listenerName: %s", listenerName)
 	listenerToken := strings.TrimSpace(string(headerBuf[68:100]))
+	go_logger.Logger.DebugF("listenerToken: %s", listenerToken)
 	command := strings.TrimSpace(string(headerBuf[100:132]))
+	go_logger.Logger.DebugF("command: %s", command)
 	var paramsStrSize uint32
 	err = binary.Read(bytes.NewReader(headerBuf[132:]), binary.BigEndian, &paramsStrSize)
 	if err != nil {
 		return nil, fmt.Errorf("(ReadPackage) failed to read param message length - %s", err)
 	}
+	go_logger.Logger.DebugF("paramsStrSize: %d", paramsStrSize)
 
 	params := make([][]byte, 0)
 	if paramsStrSize != 0 {
@@ -118,6 +126,7 @@ func ReadPackage(conn net.Conn) (*ProtocolPackage, error) {
 			return nil, fmt.Errorf("(ReadPackage) failed to read param message - %s", err)
 		}
 		params = bytes.Split(paramsBuf, []byte("||"))
+		go_logger.Logger.DebugF("params: %v", params)
 	}
 	return &ProtocolPackage{
 		Version:       version,
