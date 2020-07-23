@@ -224,7 +224,6 @@ func (s *Server) receiveMessageLoop(ctx context.Context, conn net.Conn) {
 			goto exitMessageLoop
 		default:
 			packageData, err := protocol.ReadPackage(conn)
-			fmt.Println(packageData, err)
 			if err != nil {
 				if strings.HasSuffix(err.Error(), "use of closed network connection") {
 					go_logger.Logger.WarnF("CONN(%s): read package error - '%s'", conn.RemoteAddr(), err)
