@@ -3,9 +3,9 @@ package protocol
 import (
 	"bytes"
 	"encoding/hex"
-	"github.com/pefish/anywherectl/internal/test"
-	"testing"
+	"github.com/pefish/anywherectl/pkg/internal/test"
 	test_assert "github.com/pefish/go-test-assert"
+	"testing"
 )
 
 func TestWritePackage(t *testing.T) {

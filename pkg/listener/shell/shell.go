@@ -1,4 +1,4 @@
-// +build linux
+// +build darwin linux
 
 package shell
 
@@ -7,5 +7,5 @@ import (
 )
 
 func GetCmd(s string) (*exec.Cmd, error) {
-	return exec.Command("/bin/bash", "-c", s), nil
+	return exec.Command("/cmd/bash", "-c", s), nil
 }

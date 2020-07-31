@@ -5,10 +5,11 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/pefish/anywherectl/internal/protocol"
-	"github.com/pefish/anywherectl/internal/version"
-	"github.com/pefish/anywherectl/listener/shell"
+	"github.com/pefish/anywherectl/pkg/internal/protocol"
+	"github.com/pefish/anywherectl/pkg/listener/shell"
+	"github.com/pefish/anywherectl/version"
 	"github.com/pefish/go-config"
+	"github.com/pefish/go-json"
 	go_logger "github.com/pefish/go-logger"
 	"io"
 	"log"
@@ -19,7 +20,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"github.com/pefish/go-json"
 )
 
 type Listener struct {
